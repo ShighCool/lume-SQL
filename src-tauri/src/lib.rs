@@ -142,6 +142,11 @@ pub fn run() {
             commands::mongodb::drop_mongodb_index,
             commands::mongodb::export_mongodb_collection,
             commands::mongodb::import_mongodb_collection,
+            commands::mongodb::get_mongodb_monitor_data,
+            commands::mongodb::get_mongodb_slow_queries,
+            commands::mongodb::explain_mongodb_query,
+            commands::mongodb::get_mongodb_index_stats,
+            commands::redis::get_redis_monitor_data,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

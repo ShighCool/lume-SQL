@@ -618,6 +618,264 @@ pub async fn import_mongodb_collection(
     Ok(true)
 }
 
+#[tauri::command]
+pub async fn get_mongodb_monitor_data(conn_id: String) -> Result<String, String> {
+    let (client, database_name) = {
+        let connections = CONNECTIONS.lock().map_err(|e| {
+            format!("Failed to get connection lock: {}", e)
+        })?;
+
+        let (client, database_name) = connections
+            .get(&conn_id)
+            .ok_or_else(|| format!("Connection ID '{}' does not exist", conn_id))?;
+
+        (client.clone(), database_name.clone())
+    };
+
+    let admin = client.database("admin");
+
+    // 获取服务器状态
+    let server_status = admin.run_command(doc! { "serverStatus": 1 })
+        .await
+        .map_err(|e| format!("Failed to get server status: {}", e))?;
+
+    // 获取数据库状态
+    let db_status = client.database(&database_name).run_command(doc! { "dbStats": 1, "scale": 1024 })
+        .await
+        .map_err(|e| format!("Failed to get database stats: {}", e))?;
+
+    // 提取关键指标
+    let connections = server_status
+        .get_document("connections")
+        .and_then(|c| c.get_i32("current"))
+        .unwrap_or(0) as f64;
+
+    let uptime = server_status
+        .get_i32("uptime")
+        .unwrap_or(0) as f64;
+
+    let opcounters = server_status
+        .get_document("opcounters")
+        .map_err(|e| format!("Failed to get opcounters: {}", e))?;
+
+    let total_ops: i64 = opcounters.iter()
+        .filter_map(|(k, v)| {
+            if k != "command" && k != "getmore" {
+                v.as_i64()
+            } else {
+                None
+            }
+        })
+        .sum();
+
+    let qps = if uptime > 0.0 { total_ops as f64 / uptime } else { 0.0 };
+
+    // 获取集合数量
+    let collections = db_status
+        .get_i32("collections")
+        .unwrap_or(0) as f64;
+
+    // 获取数据大小
+    let data_size = db_status
+        .get_i64("dataSize")
+        .unwrap_or(0) as f64;
+
+    // 获取索引大小
+    let index_size = db_status
+        .get_i64("indexSize")
+        .unwrap_or(0) as f64;
+
+    // 获取文档数量
+    let objects = db_status
+        .get_i64("objects")
+        .unwrap_or(0) as f64;
+
+    let result = serde_json::json!({
+        "timestamp": chrono::Utc::now().timestamp_millis(),
+        "qps": qps,
+        "connections": connections,
+        "slow_queries": 0,
+        "cpu_usage": 0.0,
+        "memory_usage": 0.0,
+        "uptime": uptime,
+        "collections": collections,
+        "data_size": data_size,
+        "index_size": index_size,
+        "documents": objects
+    });
+
+    serde_json::to_string(&result)
+        .map_err(|e| format!("Failed to serialize data: {}", e))
+}
+
+#[tauri::command]
+pub async fn get_mongodb_slow_queries(conn_id: String, database: String) -> Result<String, String> {
+    let (client, _) = {
+        let connections = CONNECTIONS.lock().map_err(|e| {
+            format!("Failed to get connection lock: {}", e)
+        })?;
+
+        let (client, _) = connections
+            .get(&conn_id)
+            .ok_or_else(|| format!("Connection ID '{}' does not exist", conn_id))?;
+
+        (client.clone(), String::new())
+    };
+
+    let admin = client.database("admin");
+
+    // 获取慢查询
+    let result = admin.run_command(doc! {
+        "profile": 2,
+        "slowms": 100
+    }).await;
+
+    match result {
+        Ok(_) => {
+            // 查询慢查询记录
+            let db = client.database(&database);
+            let coll = db.collection::<Document>("system.profile");
+
+            let cursor = coll.find(doc! {})
+                .with_options(mongodb::options::FindOptions::builder()
+                    .limit(10)
+                    .sort(doc! { "ts": -1 })
+                    .build())
+                .await
+                .map_err(|e| format!("Failed to query slow queries: {}", e))?;
+
+            let queries: Vec<Document> = cursor
+                .try_collect()
+                .await
+                .map_err(|e| format!("Failed to collect slow queries: {}", e))?;
+
+            serde_json::to_string_pretty(&queries)
+                .map_err(|e| format!("Failed to serialize slow queries: {}", e))
+        }
+        Err(e) => Err(format!("Failed to enable profiling: {}", e))
+    }
+}
+
+#[tauri::command]
+pub async fn explain_mongodb_query(
+    conn_id: String,
+    collection: String,
+    filter: String,
+    sort: Option<String>,
+) -> Result<String, String> {
+    let (client, database_name) = {
+        let connections = CONNECTIONS.lock().map_err(|e| {
+            format!("Failed to get connection lock: {}", e)
+        })?;
+
+        let (client, database_name) = connections
+            .get(&conn_id)
+            .ok_or_else(|| format!("Connection ID '{}' does not exist", conn_id))?;
+
+        (client.clone(), database_name.clone())
+    };
+
+    let db = client.database(&database_name);
+    let coll = db.collection::<Document>(&collection);
+
+    let filter_doc = if filter.is_empty() {
+        Document::new()
+    } else {
+        serde_json::from_str(&filter)
+            .map_err(|e| format!("Failed to parse filter: {}", e))?
+    };
+
+    let mut explain_cmd = doc! {
+        "explain": {
+            "find": &collection,
+            "filter": filter_doc
+        }
+    };
+
+    if let Some(sort_str) = sort {
+        if !sort_str.is_empty() {
+            let sort_doc = serde_json::from_str(&sort_str)
+                .map_err(|e| format!("Failed to parse sort: {}", e))?;
+            explain_cmd["explain"]["sort"] = sort_doc;
+        }
+    }
+
+    let result = db.run_command(explain_cmd)
+        .await
+        .map_err(|e| format!("Failed to explain query: {}", e))?;
+
+    serde_json::to_string_pretty(&result)
+        .map_err(|e| format!("Failed to serialize explain result: {}", e))
+}
+
+#[tauri::command]
+pub async fn get_mongodb_index_stats(conn_id: String, collection: String) -> Result<String, String> {
+    let (client, database_name) = {
+        let connections = CONNECTIONS.lock().map_err(|e| {
+            format!("Failed to get connection lock: {}", e)
+        })?;
+
+        let (client, database_name) = connections
+            .get(&conn_id)
+            .ok_or_else(|| format!("Connection ID '{}' does not exist", conn_id))?;
+
+        (client.clone(), database_name.clone())
+    };
+
+    let db = client.database(&database_name);
+    let coll = db.collection::<Document>(&collection);
+
+    // 获取所有索引
+    let cursor = coll.list_indexes()
+        .await
+        .map_err(|e| format!("Failed to list indexes: {}", e))?;
+
+    let indexes: Vec<IndexModel> = cursor
+        .try_collect()
+        .await
+        .map_err(|e| format!("Failed to collect indexes: {}", e))?;
+
+    // 获取集合统计信息
+    let stats = db.run_command(doc! { "collStats": &collection, "scale": 1024 })
+        .await
+        .map_err(|e| format!("Failed to get collection stats: {}", e))?;
+
+    // 获取索引使用统计
+    let mut index_stats = Vec::new();
+
+    for index in indexes {
+        let index_name = index.keys.keys().next().unwrap_or(&"_id".to_string()).clone();
+        
+        let usage_result = db.run_command(doc! {
+            "aggregate": 1,
+            "pipeline": [
+                { "$indexStats": {} },
+                { "$match": { "name": &index_name } }
+            ]
+        }).await;
+
+        let usage = match usage_result {
+            Ok(u) => u,
+            Err(_) => continue,
+        };
+
+        index_stats.push(serde_json::json!({
+            "name": index_name,
+            "keys": index.keys,
+            "options": index.options,
+            "usage": usage
+        }));
+    }
+
+    let result = serde_json::json!({
+        "stats": stats,
+        "indexes": index_stats
+    });
+
+    serde_json::to_string_pretty(&result)
+        .map_err(|e| format!("Failed to serialize index stats: {}", e))
+}
+
 fn build_connection_string(
     host: &str,
     port: u16,

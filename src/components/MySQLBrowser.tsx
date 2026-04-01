@@ -1069,7 +1069,7 @@ export function MySQLBrowser({ connectionId, database, table }: MySQLBrowserProp
         </TabsContent>
 
         <TabsContent value="monitor" className="flex-1 m-0 p-0 overflow-hidden">
-          <DatabaseMonitorPanel connectionId={connectionId || ''} />
+          <DatabaseMonitorPanel connectionId={connectionId || ''} databaseType="mysql" />
         </TabsContent>
       </Tabs>
 

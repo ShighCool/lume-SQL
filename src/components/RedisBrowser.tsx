@@ -1015,7 +1015,7 @@ export function RedisBrowser({ connectionId }: RedisBrowserProps) {
           )}
         </div>
 
-        {/* 搜索和操作 */}
+        {/* 搜索和操作工具栏 */}
         <div className="p-3 border-b space-y-2">
           <div className="relative">
             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -1026,36 +1026,46 @@ export function RedisBrowser({ connectionId }: RedisBrowserProps) {
               className="pl-9"
             />
           </div>
-          <div className="flex gap-2">
-            <Button size="sm" className="flex-1" onClick={handleAddKey}>
-              <Plus className="h-4 w-4 mr-2" />
+          {/* 紧凑的工具栏 */}
+          <div className="flex items-center gap-1 flex-shrink-0 overflow-x-auto whitespace-nowrap min-w-max">
+            {/* 第一组：添加、删除 */}
+            <Button size="sm" variant="ghost" onClick={handleAddKey}>
+              <Plus className="h-3.5 w-3.5 mr-1.5" />
               添加
             </Button>
-            <Button size="sm" variant="outline" onClick={handleRefresh} disabled={loading}>
-              <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
+            <Button 
+              size="sm" 
+              variant="ghost" 
+              onClick={handleBatchDelete} 
+              disabled={selectedKeys.size === 0}
+              className="text-destructive hover:text-destructive"
+            >
+              <Trash2 className="h-3.5 w-3.5 mr-1.5" />
+              删除
             </Button>
-          </div>
-          <div className="flex gap-2">
-            <Button size="sm" variant="outline" className="flex-1" onClick={() => setShowCommandDialog(true)}>
-              <Terminal className="h-4 w-4 mr-2" />
+
+            {/* 分隔线 */}
+            <div className="w-px h-4 bg-border mx-1 shrink-0" />
+
+            {/* 第二组：刷新 */}
+            <Button size="sm" variant="ghost" onClick={handleRefresh} disabled={loading}>
+              <RefreshCw className={cn("h-3.5 w-3.5 mr-1.5", loading && "animate-spin")} />
+              刷新
+            </Button>
+
+            {/* 分隔线 */}
+            <div className="w-px h-4 bg-border mx-1 shrink-0" />
+
+            {/* 第三组：命令、导出 */}
+            <Button size="sm" variant="ghost" onClick={() => setShowCommandDialog(true)}>
+              <Terminal className="h-3.5 w-3.5 mr-1.5" />
               命令
             </Button>
-            <Button size="sm" variant="outline" className="flex-1" onClick={() => setShowExportDialog(true)}>
-              <Download className="h-4 w-4 mr-2" />
+            <Button size="sm" variant="ghost" onClick={() => setShowExportDialog(true)}>
+              <Download className="h-3.5 w-3.5 mr-1.5" />
               导出
             </Button>
           </div>
-          {selectedKeys.size > 0 && (
-            <Button
-              size="sm"
-              variant="destructive"
-              className="w-full"
-              onClick={handleBatchDelete}
-            >
-              <Trash2 className="h-4 w-4 mr-2" />
-              删除选中 ({selectedKeys.size})
-            </Button>
-          )}
         </div>
 
         <ScrollArea className="flex-1">

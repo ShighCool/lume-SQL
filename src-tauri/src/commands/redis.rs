@@ -1190,6 +1190,108 @@ pub async fn georadiusbymember_redis(
         .map_err(|e| format!("Serialization failed: {}", e))
 }
 
+#[tauri::command]
+pub async fn get_redis_monitor_data(conn_id: String) -> Result<String, String> {
+    let mut connections = CONNECTIONS.lock().await;
+
+    let conn = connections
+        .get_mut(&conn_id)
+        .ok_or_else(|| format!("Connection ID '{}' does not exist", conn_id))?;
+
+    // 获取 INFO 命令结果
+    let info: String = redis::cmd("INFO")
+        .query(conn)
+        .map_err(|e| format!("Failed to get INFO: {}", e))?;
+
+    // 解析 INFO 数据
+    let mut uptime_seconds: f64 = 0.0;
+    let mut connected_clients: f64 = 0.0;
+    let mut total_commands_processed: f64 = 0.0;
+    let mut total_connections_received: f64 = 0.0;
+    let mut used_memory: f64 = 0.0;
+    let mut used_memory_peak: f64 = 0.0;
+    let mut total_keys: f64 = 0.0;
+    let mut expired_keys: f64 = 0.0;
+    let mut evicted_keys: f64 = 0.0;
+    let mut hit_rate: f64 = 0.0;
+
+    for line in info.lines() {
+        if line.starts_with('#') || line.is_empty() {
+            continue;
+        }
+
+        if let Some((key, value)) = line.split_once(':') {
+            match key.trim() {
+                "uptime_in_seconds" => {
+                    uptime_seconds = value.parse().unwrap_or(0.0);
+                }
+                "connected_clients" => {
+                    connected_clients = value.parse().unwrap_or(0.0);
+                }
+                "total_commands_processed" => {
+                    total_commands_processed = value.parse().unwrap_or(0.0);
+                }
+                "total_connections_received" => {
+                    total_connections_received = value.parse().unwrap_or(0.0);
+                }
+                "used_memory" => {
+                    used_memory = value.parse().unwrap_or(0.0);
+                }
+                "used_memory_peak" => {
+                    used_memory_peak = value.parse().unwrap_or(0.0);
+                }
+                "db0" => {
+                    // 解析 db0 中的 keys 数量
+                    if let Some(keys_str) = value.split("keys=").nth(1) {
+                        if let Some(keys_num) = keys_str.split(',').next() {
+                            total_keys = keys_num.parse().unwrap_or(0.0);
+                        }
+                    }
+                }
+                "expired_keys" => {
+                    expired_keys = value.parse().unwrap_or(0.0);
+                }
+                "evicted_keys" => {
+                    evicted_keys = value.parse().unwrap_or(0.0);
+                }
+                "keyspace_hits" => {
+                    let hits: f64 = value.parse().unwrap_or(0.0);
+                    if total_commands_processed > 0.0 {
+                        hit_rate = (hits / total_commands_processed) * 100.0;
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+
+    // 计算 QPS
+    let qps = if uptime_seconds > 0.0 {
+        total_commands_processed / uptime_seconds
+    } else {
+        0.0
+    };
+
+    let result = serde_json::json!({
+        "timestamp": chrono::Utc::now().timestamp_millis(),
+        "qps": qps,
+        "connections": connected_clients,
+        "total_keys": total_keys,
+        "expired_keys": expired_keys,
+        "evicted_keys": evicted_keys,
+        "cpu_usage": 0.0,
+        "memory_usage": used_memory,
+        "uptime": uptime_seconds,
+        "total_commands": total_commands_processed,
+        "total_connections": total_connections_received,
+        "memory_peak": used_memory_peak,
+        "hit_rate": hit_rate
+    });
+
+    serde_json::to_string(&result)
+        .map_err(|e| format!("Failed to serialize data: {}", e))
+}
+
 fn create_client(
     host: &str,
     port: u16,

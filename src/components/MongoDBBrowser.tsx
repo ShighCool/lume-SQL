@@ -371,15 +371,15 @@ export function MongoDBBrowser({ connectionId }: MongoDBBrowserProps) {
   return (
     <div className="flex h-full">
       <div className="w-[260px] border-r flex flex-col">
-        <div className="p-3 border-b space-y-2">
+        <div className="p-3 border-b">
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-semibold">集合</h3>
             <div className="flex gap-1">
-              <Button size="icon-xs" variant="outline" onClick={handleAddCollection}>
-                <Plus className="h-3 w-3" />
+              <Button size="sm" variant="ghost" onClick={handleAddCollection}>
+                <Plus className="h-3.5 w-3.5" />
               </Button>
-              <Button size="icon-xs" variant="outline" onClick={handleRefresh} disabled={loading}>
-                <RefreshCw className={cn("h-3 w-3", loading && "animate-spin")} />
+              <Button size="sm" variant="ghost" onClick={handleRefresh} disabled={loading}>
+                <RefreshCw className={cn("h-3.5 w-3.5", loading && "animate-spin")} />
               </Button>
             </div>
           </div>
@@ -406,15 +406,16 @@ export function MongoDBBrowser({ connectionId }: MongoDBBrowserProps) {
       <div className="flex-1 flex flex-col">
         {selectedCollection ? (
           <>
-            <div className="p-4 border-b space-y-3">
+            {/* 工具栏 */}
+            <div className="px-4 py-3 border-b space-y-3">
               <div className="flex items-center justify-between">
                 <h3 className="text-lg font-semibold">{selectedCollection}</h3>
-                <Button size="sm" onClick={() => setShowAddDialog(true)}>
-                  <Plus className="h-4 w-4 mr-2" />
+                <Button size="sm" variant="ghost" onClick={() => setShowAddDialog(true)}>
+                  <Plus className="h-3.5 w-3.5 mr-1.5" />
                   添加文档
                 </Button>
               </div>
-              <div className="flex gap-2">
+              <div className="flex items-center gap-2">
                 <div className="relative flex-1">
                   <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                   <Input
@@ -424,7 +425,8 @@ export function MongoDBBrowser({ connectionId }: MongoDBBrowserProps) {
                     className="pl-9 font-mono text-sm"
                   />
                 </div>
-                <Button size="sm" onClick={handleApplyFilter} disabled={loading}>
+                <Button size="sm" variant="ghost" onClick={handleApplyFilter} disabled={loading}>
+                  <Search className="h-3.5 w-3.5 mr-1.5" />
                   查询
                 </Button>
               </div>
