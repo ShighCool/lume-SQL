@@ -2,7 +2,7 @@ use lazy_static::lazy_static;
 use redis::{Client, Commands, Connection};
 use serde_json::{json, Value};
 use std::collections::HashMap;
-use std::sync::Mutex;
+use tokio::sync::Mutex;
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 
 lazy_static! {
@@ -10,7 +10,7 @@ lazy_static! {
 }
 
 #[tauri::command]
-pub fn test_redis_connection(
+pub async fn test_redis_connection(
     host: String,
     port: u16,
     password: Option<String>,
@@ -29,7 +29,7 @@ pub fn test_redis_connection(
 }
 
 #[tauri::command]
-pub fn connect_redis(
+pub async fn connect_redis(
     conn_id: String,
     host: String,
     port: u16,
@@ -48,19 +48,15 @@ pub fn connect_redis(
             .map_err(|e| format!("Select database failed: {}", e))?;
     }
 
-    let mut connections = CONNECTIONS.lock().map_err(|e| {
-        format!("Failed to get connection lock: {}", e)
-    })?;
+    let mut connections = CONNECTIONS.lock().await;
 
     connections.insert(conn_id, conn);
     Ok(true)
 }
 
 #[tauri::command]
-pub fn disconnect_redis(conn_id: String) -> Result<bool, String> {
-    let mut connections = CONNECTIONS.lock().map_err(|e| {
-        format!("Failed to get connection lock: {}", e)
-    })?;
+pub async fn disconnect_redis(conn_id: String) -> Result<bool, String> {
+    let mut connections = CONNECTIONS.lock().await;
 
     match connections.remove(&conn_id) {
         Some(_) => Ok(true),
@@ -69,10 +65,8 @@ pub fn disconnect_redis(conn_id: String) -> Result<bool, String> {
 }
 
 #[tauri::command]
-pub fn get_redis_keys(conn_id: String, pattern: String) -> Result<String, String> {
-    let mut connections = CONNECTIONS.lock().map_err(|e| {
-        format!("Failed to get connection lock: {}", e)
-    })?;
+pub async fn get_redis_keys(conn_id: String, pattern: String) -> Result<String, String> {
+    let mut connections = CONNECTIONS.lock().await;
 
     let conn = connections
         .get_mut(&conn_id)
@@ -88,10 +82,8 @@ pub fn get_redis_keys(conn_id: String, pattern: String) -> Result<String, String
 }
 
 #[tauri::command]
-pub fn get_redis_value(conn_id: String, key: String) -> Result<String, String> {
-    let mut connections = CONNECTIONS.lock().map_err(|e| {
-        format!("Failed to get connection lock: {}", e)
-    })?;
+pub async fn get_redis_value(conn_id: String, key: String) -> Result<String, String> {
+    let mut connections = CONNECTIONS.lock().await;
 
     let conn = connections
         .get_mut(&conn_id)
@@ -136,10 +128,8 @@ pub fn get_redis_value(conn_id: String, key: String) -> Result<String, String> {
 }
 
 #[tauri::command]
-pub fn get_redis_key_type(conn_id: String, key: String) -> Result<String, String> {
-    let mut connections = CONNECTIONS.lock().map_err(|e| {
-        format!("Failed to get connection lock: {}", e)
-    })?;
+pub async fn get_redis_key_type(conn_id: String, key: String) -> Result<String, String> {
+    let mut connections = CONNECTIONS.lock().await;
 
     let conn = connections
         .get_mut(&conn_id)
@@ -154,10 +144,8 @@ pub fn get_redis_key_type(conn_id: String, key: String) -> Result<String, String
 }
 
 #[tauri::command]
-pub fn get_redis_key_ttl(conn_id: String, key: String) -> Result<i64, String> {
-    let mut connections = CONNECTIONS.lock().map_err(|e| {
-        format!("Failed to get connection lock: {}", e)
-    })?;
+pub async fn get_redis_key_ttl(conn_id: String, key: String) -> Result<i64, String> {
+    let mut connections = CONNECTIONS.lock().await;
 
     let conn = connections
         .get_mut(&conn_id)
@@ -172,10 +160,8 @@ pub fn get_redis_key_ttl(conn_id: String, key: String) -> Result<i64, String> {
 }
 
 #[tauri::command]
-pub fn delete_redis_key(conn_id: String, key: String) -> Result<bool, String> {
-    let mut connections = CONNECTIONS.lock().map_err(|e| {
-        format!("Failed to get connection lock: {}", e)
-    })?;
+pub async fn delete_redis_key(conn_id: String, key: String) -> Result<bool, String> {
+    let mut connections = CONNECTIONS.lock().await;
 
     let conn = connections
         .get_mut(&conn_id)
@@ -190,15 +176,13 @@ pub fn delete_redis_key(conn_id: String, key: String) -> Result<bool, String> {
 }
 
 #[tauri::command]
-pub fn set_redis_value(
+pub async fn set_redis_value(
     conn_id: String,
     key: String,
     value: String,
     ttl: Option<i64>,
 ) -> Result<bool, String> {
-    let mut connections = CONNECTIONS.lock().map_err(|e| {
-        format!("Failed to get connection lock: {}", e)
-    })?;
+    let mut connections = CONNECTIONS.lock().await;
 
     let conn = connections
         .get_mut(&conn_id)
@@ -223,10 +207,8 @@ pub fn set_redis_value(
 }
 
 #[tauri::command]
-pub fn set_redis_key_ttl(conn_id: String, key: String, ttl: i64) -> Result<bool, String> {
-    let mut connections = CONNECTIONS.lock().map_err(|e| {
-        format!("Failed to get connection lock: {}", e)
-    })?;
+pub async fn set_redis_key_ttl(conn_id: String, key: String, ttl: i64) -> Result<bool, String> {
+    let mut connections = CONNECTIONS.lock().await;
 
     let conn = connections
         .get_mut(&conn_id)
@@ -242,10 +224,8 @@ pub fn set_redis_key_ttl(conn_id: String, key: String, ttl: i64) -> Result<bool,
 }
 
 #[tauri::command]
-pub fn delete_redis_keys_batch(conn_id: String, keys: Vec<String>) -> Result<i32, String> {
-    let mut connections = CONNECTIONS.lock().map_err(|e| {
-        format!("Failed to get connection lock: {}", e)
-    })?;
+pub async fn delete_redis_keys_batch(conn_id: String, keys: Vec<String>) -> Result<i32, String> {
+    let mut connections = CONNECTIONS.lock().await;
 
     let conn = connections
         .get_mut(&conn_id)
@@ -260,10 +240,8 @@ pub fn delete_redis_keys_batch(conn_id: String, keys: Vec<String>) -> Result<i32
 }
 
 #[tauri::command]
-pub fn get_redis_db_info(conn_id: String) -> Result<String, String> {
-    let mut connections = CONNECTIONS.lock().map_err(|e| {
-        format!("Failed to get connection lock: {}", e)
-    })?;
+pub async fn get_redis_db_info(conn_id: String) -> Result<String, String> {
+    let mut connections = CONNECTIONS.lock().await;
 
     let conn = connections
         .get_mut(&conn_id)
@@ -277,10 +255,8 @@ pub fn get_redis_db_info(conn_id: String) -> Result<String, String> {
 }
 
 #[tauri::command]
-pub fn select_redis_database(conn_id: String, db: i64) -> Result<bool, String> {
-    let mut connections = CONNECTIONS.lock().map_err(|e| {
-        format!("Failed to get connection lock: {}", e)
-    })?;
+pub async fn select_redis_database(conn_id: String, db: i64) -> Result<bool, String> {
+    let mut connections = CONNECTIONS.lock().await;
 
     let conn = connections
         .get_mut(&conn_id)
@@ -295,15 +271,13 @@ pub fn select_redis_database(conn_id: String, db: i64) -> Result<bool, String> {
 }
 
 #[tauri::command]
-pub fn add_hash_field(
+pub async fn add_hash_field(
     conn_id: String,
     key: String,
     field: String,
     value: String,
 ) -> Result<bool, String> {
-    let mut connections = CONNECTIONS.lock().map_err(|e| {
-        format!("Failed to get connection lock: {}", e)
-    })?;
+    let mut connections = CONNECTIONS.lock().await;
 
     let conn = connections
         .get_mut(&conn_id)
@@ -316,24 +290,22 @@ pub fn add_hash_field(
 }
 
 #[tauri::command]
-pub fn update_hash_field(
+pub async fn update_hash_field(
     conn_id: String,
     key: String,
     field: String,
     value: String,
 ) -> Result<bool, String> {
-    add_hash_field(conn_id, key, field, value)
+    add_hash_field(conn_id, key, field, value).await
 }
 
 #[tauri::command]
-pub fn delete_hash_field(
+pub async fn delete_hash_field(
     conn_id: String,
     key: String,
     field: String,
 ) -> Result<bool, String> {
-    let mut connections = CONNECTIONS.lock().map_err(|e| {
-        format!("Failed to get connection lock: {}", e)
-    })?;
+    let mut connections = CONNECTIONS.lock().await;
 
     let conn = connections
         .get_mut(&conn_id)
@@ -346,15 +318,13 @@ pub fn delete_hash_field(
 }
 
 #[tauri::command]
-pub fn push_list_element(
+pub async fn push_list_element(
     conn_id: String,
     key: String,
     value: String,
     direction: String,
 ) -> Result<bool, String> {
-    let mut connections = CONNECTIONS.lock().map_err(|e| {
-        format!("Failed to get connection lock: {}", e)
-    })?;
+    let mut connections = CONNECTIONS.lock().await;
 
     let conn = connections
         .get_mut(&conn_id)
@@ -372,14 +342,12 @@ pub fn push_list_element(
 }
 
 #[tauri::command]
-pub fn pop_list_element(
+pub async fn pop_list_element(
     conn_id: String,
     key: String,
     direction: String,
 ) -> Result<String, String> {
-    let mut connections = CONNECTIONS.lock().map_err(|e| {
-        format!("Failed to get connection lock: {}", e)
-    })?;
+    let mut connections = CONNECTIONS.lock().await;
 
     let conn = connections
         .get_mut(&conn_id)
@@ -397,15 +365,13 @@ pub fn pop_list_element(
 }
 
 #[tauri::command]
-pub fn set_list_element(
+pub async fn set_list_element(
     conn_id: String,
     key: String,
     index: i64,
     value: String,
 ) -> Result<bool, String> {
-    let mut connections = CONNECTIONS.lock().map_err(|e| {
-        format!("Failed to get connection lock: {}", e)
-    })?;
+    let mut connections = CONNECTIONS.lock().await;
 
     let conn = connections
         .get_mut(&conn_id)
@@ -422,14 +388,12 @@ pub fn set_list_element(
 }
 
 #[tauri::command]
-pub fn delete_list_element(
+pub async fn delete_list_element(
     conn_id: String,
     key: String,
     index: i64,
 ) -> Result<bool, String> {
-    let mut connections = CONNECTIONS.lock().map_err(|e| {
-        format!("Failed to get connection lock: {}", e)
-    })?;
+    let mut connections = CONNECTIONS.lock().await;
 
     let conn = connections
         .get_mut(&conn_id)
@@ -454,14 +418,12 @@ pub fn delete_list_element(
 }
 
 #[tauri::command]
-pub fn add_set_members(
+pub async fn add_set_members(
     conn_id: String,
     key: String,
     members: Vec<String>,
 ) -> Result<bool, String> {
-    let mut connections = CONNECTIONS.lock().map_err(|e| {
-        format!("Failed to get connection lock: {}", e)
-    })?;
+    let mut connections = CONNECTIONS.lock().await;
 
     let conn = connections
         .get_mut(&conn_id)
@@ -474,14 +436,12 @@ pub fn add_set_members(
 }
 
 #[tauri::command]
-pub fn remove_set_members(
+pub async fn remove_set_members(
     conn_id: String,
     key: String,
     members: Vec<String>,
 ) -> Result<bool, String> {
-    let mut connections = CONNECTIONS.lock().map_err(|e| {
-        format!("Failed to get connection lock: {}", e)
-    })?;
+    let mut connections = CONNECTIONS.lock().await;
 
     let conn = connections
         .get_mut(&conn_id)
@@ -494,14 +454,12 @@ pub fn remove_set_members(
 }
 
 #[tauri::command]
-pub fn check_set_member(
+pub async fn check_set_member(
     conn_id: String,
     key: String,
     member: String,
 ) -> Result<bool, String> {
-    let mut connections = CONNECTIONS.lock().map_err(|e| {
-        format!("Failed to get connection lock: {}", e)
-    })?;
+    let mut connections = CONNECTIONS.lock().await;
 
     let conn = connections
         .get_mut(&conn_id)
@@ -514,15 +472,13 @@ pub fn check_set_member(
 }
 
 #[tauri::command]
-pub fn add_zset_member(
+pub async fn add_zset_member(
     conn_id: String,
     key: String,
     member: String,
     score: i64,
 ) -> Result<bool, String> {
-    let mut connections = CONNECTIONS.lock().map_err(|e| {
-        format!("Failed to get connection lock: {}", e)
-    })?;
+    let mut connections = CONNECTIONS.lock().await;
 
     let conn = connections
         .get_mut(&conn_id)
@@ -535,24 +491,22 @@ pub fn add_zset_member(
 }
 
 #[tauri::command]
-pub fn update_zset_score(
+pub async fn update_zset_score(
     conn_id: String,
     key: String,
     member: String,
     score: i64,
 ) -> Result<bool, String> {
-    add_zset_member(conn_id, key, member, score)
+    add_zset_member(conn_id, key, member, score).await
 }
 
 #[tauri::command]
-pub fn remove_zset_member(
+pub async fn remove_zset_member(
     conn_id: String,
     key: String,
     member: String,
 ) -> Result<bool, String> {
-    let mut connections = CONNECTIONS.lock().map_err(|e| {
-        format!("Failed to get connection lock: {}", e)
-    })?;
+    let mut connections = CONNECTIONS.lock().await;
 
     let conn = connections
         .get_mut(&conn_id)
@@ -565,15 +519,13 @@ pub fn remove_zset_member(
 }
 
 #[tauri::command]
-pub fn increment_zset_score(
+pub async fn increment_zset_score(
     conn_id: String,
     key: String,
     member: String,
     delta: i64,
 ) -> Result<i64, String> {
-    let mut connections = CONNECTIONS.lock().map_err(|e| {
-        format!("Failed to get connection lock: {}", e)
-    })?;
+    let mut connections = CONNECTIONS.lock().await;
 
     let conn = connections
         .get_mut(&conn_id)
@@ -590,13 +542,11 @@ pub fn increment_zset_score(
 }
 
 #[tauri::command]
-pub fn get_redis_key_memory_usage(
+pub async fn get_redis_key_memory_usage(
     conn_id: String,
     key: String,
 ) -> Result<i64, String> {
-    let mut connections = CONNECTIONS.lock().map_err(|e| {
-        format!("Failed to get connection lock: {}", e)
-    })?;
+    let mut connections = CONNECTIONS.lock().await;
 
     let conn = connections
         .get_mut(&conn_id)
@@ -612,14 +562,12 @@ pub fn get_redis_key_memory_usage(
 }
 
 #[tauri::command]
-pub fn rename_redis_key(
+pub async fn rename_redis_key(
     conn_id: String,
     old_key: String,
     new_key: String,
 ) -> Result<bool, String> {
-    let mut connections = CONNECTIONS.lock().map_err(|e| {
-        format!("Failed to get connection lock: {}", e)
-    })?;
+    let mut connections = CONNECTIONS.lock().await;
 
     let conn = connections
         .get_mut(&conn_id)
@@ -635,13 +583,11 @@ pub fn rename_redis_key(
 }
 
 #[tauri::command]
-pub fn execute_redis_command(
+pub async fn execute_redis_command(
     conn_id: String,
     command: String,
 ) -> Result<String, String> {
-    let mut connections = CONNECTIONS.lock().map_err(|e| {
-        format!("Failed to get connection lock: {}", e)
-    })?;
+    let mut connections = CONNECTIONS.lock().await;
 
     let conn = connections
         .get_mut(&conn_id)
@@ -667,13 +613,11 @@ pub fn execute_redis_command(
 }
 
 #[tauri::command]
-pub fn export_redis_keys(
+pub async fn export_redis_keys(
     conn_id: String,
     pattern: String,
 ) -> Result<String, String> {
-    let mut connections = CONNECTIONS.lock().map_err(|e| {
-        format!("Failed to get connection lock: {}", e)
-    })?;
+    let mut connections = CONNECTIONS.lock().await;
 
     let conn = connections
         .get_mut(&conn_id)
@@ -712,15 +656,13 @@ pub fn export_redis_keys(
 }
 
 #[tauri::command]
-pub fn get_redis_info(conn_id: String) -> Result<String, String> {
-    get_redis_db_info(conn_id)
+pub async fn get_redis_info(conn_id: String) -> Result<String, String> {
+    get_redis_db_info(conn_id).await
 }
 
 #[tauri::command]
-pub fn get_redis_slowlog(conn_id: String) -> Result<String, String> {
-    let mut connections = CONNECTIONS.lock().map_err(|e| {
-        format!("Failed to get connection lock: {}", e)
-    })?;
+pub async fn get_redis_slowlog(conn_id: String) -> Result<String, String> {
+    let mut connections = CONNECTIONS.lock().await;
 
     let conn = connections
         .get_mut(&conn_id)
@@ -736,10 +678,8 @@ pub fn get_redis_slowlog(conn_id: String) -> Result<String, String> {
 }
 
 #[tauri::command]
-pub fn get_redis_clients(conn_id: String) -> Result<String, String> {
-    let mut connections = CONNECTIONS.lock().map_err(|e| {
-        format!("Failed to get connection lock: {}", e)
-    })?;
+pub async fn get_redis_clients(conn_id: String) -> Result<String, String> {
+    let mut connections = CONNECTIONS.lock().await;
 
     let conn = connections
         .get_mut(&conn_id)
@@ -754,8 +694,8 @@ pub fn get_redis_clients(conn_id: String) -> Result<String, String> {
 }
 
 #[tauri::command]
-pub fn get_redis_stats(conn_id: String) -> Result<String, String> {
-    let info = get_redis_info(conn_id)?;
+pub async fn get_redis_stats(conn_id: String) -> Result<String, String> {
+    let info = get_redis_info(conn_id).await?;
 
     let stats: Value = json!({
         "info": info,
@@ -767,13 +707,11 @@ pub fn get_redis_stats(conn_id: String) -> Result<String, String> {
 }
 
 #[tauri::command]
-pub fn import_redis_keys(
+pub async fn import_redis_keys(
     conn_id: String,
     data: String,
 ) -> Result<bool, String> {
-    let mut connections = CONNECTIONS.lock().map_err(|e| {
-        format!("Failed to get connection lock: {}", e)
-    })?;
+    let mut connections = CONNECTIONS.lock().await;
 
     let conn = connections
         .get_mut(&conn_id)
@@ -804,13 +742,11 @@ pub fn import_redis_keys(
 }
 
 #[tauri::command]
-pub fn dump_redis_key(
+pub async fn dump_redis_key(
     conn_id: String,
     key: String,
 ) -> Result<String, String> {
-    let mut connections = CONNECTIONS.lock().map_err(|e| {
-        format!("Failed to get connection lock: {}", e)
-    })?;
+    let mut connections = CONNECTIONS.lock().await;
 
     let conn = connections
         .get_mut(&conn_id)
@@ -826,15 +762,13 @@ pub fn dump_redis_key(
 }
 
 #[tauri::command]
-pub fn restore_redis_key(
+pub async fn restore_redis_key(
     conn_id: String,
     key: String,
     data: String,
     ttl: i64,
 ) -> Result<bool, String> {
-    let mut connections = CONNECTIONS.lock().map_err(|e| {
-        format!("Failed to get connection lock: {}", e)
-    })?;
+    let mut connections = CONNECTIONS.lock().await;
 
     let conn = connections
         .get_mut(&conn_id)
@@ -855,15 +789,13 @@ pub fn restore_redis_key(
 }
 
 #[tauri::command]
-pub fn set_redis_bit(
+pub async fn set_redis_bit(
     conn_id: String,
     key: String,
     offset: i64,
     value: i64,
 ) -> Result<i64, String> {
-    let mut connections = CONNECTIONS.lock().map_err(|e| {
-        format!("Failed to get connection lock: {}", e)
-    })?;
+    let mut connections = CONNECTIONS.lock().await;
 
     let conn = connections
         .get_mut(&conn_id)
@@ -880,14 +812,12 @@ pub fn set_redis_bit(
 }
 
 #[tauri::command]
-pub fn get_redis_bit(
+pub async fn get_redis_bit(
     conn_id: String,
     key: String,
     offset: i64,
 ) -> Result<i64, String> {
-    let mut connections = CONNECTIONS.lock().map_err(|e| {
-        format!("Failed to get connection lock: {}", e)
-    })?;
+    let mut connections = CONNECTIONS.lock().await;
 
     let conn = connections
         .get_mut(&conn_id)
@@ -903,15 +833,13 @@ pub fn get_redis_bit(
 }
 
 #[tauri::command]
-pub fn bitcount_redis(
+pub async fn bitcount_redis(
     conn_id: String,
     key: String,
     start: Option<i64>,
     end: Option<i64>,
 ) -> Result<i64, String> {
-    let mut connections = CONNECTIONS.lock().map_err(|e| {
-        format!("Failed to get connection lock: {}", e)
-    })?;
+    let mut connections = CONNECTIONS.lock().await;
 
     let conn = connections
         .get_mut(&conn_id)
@@ -935,15 +863,13 @@ pub fn bitcount_redis(
 }
 
 #[tauri::command]
-pub fn bitop_redis(
+pub async fn bitop_redis(
     conn_id: String,
     operation: String,
     destkey: String,
     keys: Vec<String>,
 ) -> Result<i64, String> {
-    let mut connections = CONNECTIONS.lock().map_err(|e| {
-        format!("Failed to get connection lock: {}", e)
-    })?;
+    let mut connections = CONNECTIONS.lock().await;
 
     let conn = connections
         .get_mut(&conn_id)
@@ -966,16 +892,14 @@ pub fn bitop_redis(
 }
 
 #[tauri::command]
-pub fn bitpos_redis(
+pub async fn bitpos_redis(
     conn_id: String,
     key: String,
     bit: i64,
     start: Option<i64>,
     end: Option<i64>,
 ) -> Result<i64, String> {
-    let mut connections = CONNECTIONS.lock().map_err(|e| {
-        format!("Failed to get connection lock: {}", e)
-    })?;
+    let mut connections = CONNECTIONS.lock().await;
 
     let conn = connections
         .get_mut(&conn_id)
@@ -1001,14 +925,12 @@ pub fn bitpos_redis(
 }
 
 #[tauri::command]
-pub fn geoadd_redis(
+pub async fn geoadd_redis(
     conn_id: String,
     key: String,
     members: Vec<(f64, f64, String)>,
 ) -> Result<i32, String> {
-    let mut connections = CONNECTIONS.lock().map_err(|e| {
-        format!("Failed to get connection lock: {}", e)
-    })?;
+    let mut connections = CONNECTIONS.lock().await;
 
     let conn = connections
         .get_mut(&conn_id)
@@ -1029,16 +951,14 @@ pub fn geoadd_redis(
 }
 
 #[tauri::command]
-pub fn geodist_redis(
+pub async fn geodist_redis(
     conn_id: String,
     key: String,
     member1: String,
     member2: String,
     unit: String,
 ) -> Result<f64, String> {
-    let mut connections = CONNECTIONS.lock().map_err(|e| {
-        format!("Failed to get connection lock: {}", e)
-    })?;
+    let mut connections = CONNECTIONS.lock().await;
 
     let conn = connections
         .get_mut(&conn_id)
@@ -1056,14 +976,12 @@ pub fn geodist_redis(
 }
 
 #[tauri::command]
-pub fn geohash_redis(
+pub async fn geohash_redis(
     conn_id: String,
     key: String,
     members: Vec<String>,
 ) -> Result<String, String> {
-    let mut connections = CONNECTIONS.lock().map_err(|e| {
-        format!("Failed to get connection lock: {}", e)
-    })?;
+    let mut connections = CONNECTIONS.lock().await;
 
     let conn = connections
         .get_mut(&conn_id)
@@ -1080,14 +998,12 @@ pub fn geohash_redis(
 }
 
 #[tauri::command]
-pub fn geopos_redis(
+pub async fn geopos_redis(
     conn_id: String,
     key: String,
     members: Vec<String>,
 ) -> Result<String, String> {
-    let mut connections = CONNECTIONS.lock().map_err(|e| {
-        format!("Failed to get connection lock: {}", e)
-    })?;
+    let mut connections = CONNECTIONS.lock().await;
 
     let conn = connections
         .get_mut(&conn_id)
@@ -1117,7 +1033,7 @@ pub fn geopos_redis(
 }
 
 #[tauri::command]
-pub fn georadius_redis(
+pub async fn georadius_redis(
     conn_id: String,
     key: String,
     longitude: f64,
@@ -1129,9 +1045,7 @@ pub fn georadius_redis(
     withhash: bool,
     count: Option<i64>,
 ) -> Result<String, String> {
-    let mut connections = CONNECTIONS.lock().map_err(|e| {
-        format!("Failed to get connection lock: {}", e)
-    })?;
+    let mut connections = CONNECTIONS.lock().await;
 
     let conn = connections
         .get_mut(&conn_id)
@@ -1199,7 +1113,7 @@ pub fn georadius_redis(
 }
 
 #[tauri::command]
-pub fn georadiusbymember_redis(
+pub async fn georadiusbymember_redis(
     conn_id: String,
     key: String,
     member: String,
@@ -1210,9 +1124,7 @@ pub fn georadiusbymember_redis(
     withhash: bool,
     count: Option<i64>,
 ) -> Result<String, String> {
-    let mut connections = CONNECTIONS.lock().map_err(|e| {
-        format!("Failed to get connection lock: {}", e)
-    })?;
+    let mut connections = CONNECTIONS.lock().await;
 
     let conn = connections
         .get_mut(&conn_id)
