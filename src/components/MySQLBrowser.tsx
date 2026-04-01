@@ -868,11 +868,8 @@ export function MySQLBrowser({ connectionId, database, table }: MySQLBrowserProp
       <div className="flex-1 flex flex-col overflow-hidden">
         {!loading && currentData && (
           <>
-            {/* 统计信息栏 */}
+            {/* 统计信息栏和分页 */}
             <div className="flex items-center justify-between px-4 py-2 border-b shrink-0">
-              <h3 className="text-sm font-semibold">
-                {queryResult ? '查询结果' : `数据: ${database}.${table}`}
-              </h3>
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <span>共 {currentData.total} 条</span>
                 {queryExecutionTime !== null && (
@@ -884,6 +881,29 @@ export function MySQLBrowser({ connectionId, database, table }: MySQLBrowserProp
                 <ChevronRight className="h-4 w-4" />
                 <span>已选 {selectedRows.size} 条</span>
               </div>
+              {!queryResult && tableData && (
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setPage((p) => Math.max(1, p - 1))}
+                    disabled={page === 1}
+                  >
+                    上一页
+                  </Button>
+                  <span className="text-sm text-muted-foreground">
+                    {Math.ceil(tableData.total / pageSize)} 页
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setPage((p) => p + 1)}
+                    disabled={page * pageSize >= tableData.total}
+                  >
+                    下一页
+                  </Button>
+                </div>
+              )}
             </div>
             
             {/* 表格滚动区域 - 固定高度 620px（刚好显示15行数据） */}
@@ -989,31 +1009,6 @@ export function MySQLBrowser({ connectionId, database, table }: MySQLBrowserProp
                 </tbody>
               </table>
             </div>
-
-            {/* 分页按钮栏 */}
-            {!queryResult && tableData && (
-              <div className="flex items-center justify-between px-4 py-2 border-t shrink-0">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setPage((p) => Math.max(1, p - 1))}
-                  disabled={page === 1}
-                >
-                  上一页
-                </Button>
-                <span className="text-sm text-muted-foreground">
-                  {Math.ceil(tableData.total / pageSize)} 页
-                </span>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setPage((p) => p + 1)}
-                  disabled={page * pageSize >= tableData.total}
-                >
-                  下一页
-                </Button>
-              </div>
-            )}
           </>
         )}
 
