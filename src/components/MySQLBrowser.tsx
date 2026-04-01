@@ -47,7 +47,7 @@ export function MySQLBrowser({ connectionId, database, table }: MySQLBrowserProp
   const [tableSchema, setTableSchema] = useState<ColumnInfo[]>([]);
   const [loading, setLoading] = useState(false);
   const [page, setPage] = useState(1);
-  const [pageSize] = useState(15);
+  const [pageSize] = useState(50);
   const [sqlQuery, setSqlQuery] = useState('');
   const [queryResult, setQueryResult] = useState<TableData | null>(null);
   const [selectedRows, setSelectedRows] = useState<Set<number>>(new Set());
