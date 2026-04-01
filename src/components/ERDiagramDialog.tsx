@@ -173,7 +173,9 @@ export function ERDiagramDialog({ open, onOpenChange, connectionId, database }: 
         // 列类型
         ctx.fillStyle = '#64748b';
         ctx.font = '10px Arial';
-        ctx.fillText(column.type, pos.x + tableWidth - 5, colY + 17, 80, 'right');
+        const maxWidth = 80;
+        const typeText = column.type.length > 10 ? column.type.substring(0, 10) + '...' : column.type;
+        ctx.fillText(typeText, pos.x + tableWidth - 5 - maxWidth, colY + 17);
       });
     });
 

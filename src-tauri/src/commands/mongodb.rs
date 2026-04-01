@@ -776,7 +776,6 @@ pub async fn explain_mongodb_query(
     };
 
     let db = client.database(&database_name);
-    let coll = db.collection::<Document>(&collection);
 
     let filter_doc = if filter.is_empty() {
         Document::new()
@@ -785,20 +784,35 @@ pub async fn explain_mongodb_query(
             .map_err(|e| format!("Failed to parse filter: {}", e))?
     };
 
-    let mut explain_cmd = doc! {
-        "explain": {
-            "find": &collection,
-            "filter": filter_doc
+    let explain_cmd = if let Some(sort_str) = sort {
+        if !sort_str.is_empty() {
+            let sort_value: serde_json::Value = serde_json::from_str(&sort_str)
+                .map_err(|e| format!("Failed to parse sort: {}", e))?;
+            let sort_doc: Document = serde_json::from_value(sort_value)
+                .map_err(|e| format!("Failed to convert sort to Document: {}", e))?;
+            doc! {
+                "explain": {
+                    "find": &collection,
+                    "filter": filter_doc,
+                    "sort": sort_doc
+                }
+            }
+        } else {
+            doc! {
+                "explain": {
+                    "find": &collection,
+                    "filter": filter_doc
+                }
+            }
+        }
+    } else {
+        doc! {
+            "explain": {
+                "find": &collection,
+                "filter": filter_doc
+            }
         }
     };
-
-    if let Some(sort_str) = sort {
-        if !sort_str.is_empty() {
-            let sort_doc = serde_json::from_str(&sort_str)
-                .map_err(|e| format!("Failed to parse sort: {}", e))?;
-            explain_cmd["explain"]["sort"] = sort_doc;
-        }
-    }
 
     let result = db.run_command(explain_cmd)
         .await

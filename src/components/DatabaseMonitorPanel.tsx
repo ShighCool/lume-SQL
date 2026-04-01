@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { ScrollArea } from './ui/scroll-area';
-import { RefreshCw, Activity, Database, Clock, AlertTriangle, HardDrive, Layers } from 'lucide-react';
+import { RefreshCw, Activity, Database, Clock, AlertTriangle, Layers } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
 type DatabaseType = 'mysql' | 'redis' | 'mongodb';

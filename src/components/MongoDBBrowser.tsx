@@ -4,8 +4,6 @@ import { Plus, Trash2, RefreshCw, Search, Database, FileText } from 'lucide-reac
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { ScrollArea } from './ui/scroll-area';
-import { DataTable } from './ui/table';
-import { ColumnDef } from '@tanstack/react-table';
 import type { MongoDocument } from '../types/database';
 import type { ChangeEvent } from 'react';
 import { cn } from '../lib/utils';
@@ -42,62 +40,6 @@ export function MongoDBBrowser({ connectionId }: MongoDBBrowserProps) {
       console.error('加载数据库列表失败:', error);
     }
   }, [connectionId]);
-
-  // 加载集合列表
-  const loadCollections = useCallback(async () => {
-    if (!connectionId) return;
-    setLoading(true);
-    try {
-      const result: string[] = await invoke('get_mongodb_collections', {
-        connId: connectionId,
-      });
-      setCollections(result);
-    } catch (error) {
-      console.error('加载集合列表失败:', error);
-      alert(`加载集合列表失败: ${error}`);
-    } finally {
-      setLoading(false);
-    }
-  }, [connectionId]);
-
-  useEffect(() => {
-    loadCollections();
-  }, [loadCollections]);
-
-  // 加载文档
-  const loadDocuments = useCallback(async () => {
-    if (!connectionId || !selectedCollection) return;
-    setLoading(true);
-    try {
-      const result: string = await invoke('find_mongodb_documents', {
-        connId: connectionId,
-        collection: selectedCollection,
-        filter: filterQuery,
-      });
-      const docs = JSON.parse(result);
-      setDocuments(docs);
-    } catch (error) {
-      console.error('加载文档失败:', error);
-      alert(`加载文档失败: ${error}`);
-    } finally {
-      setLoading(false);
-    }
-  }, [connectionId, selectedCollection, filterQuery]);
-
-  const handleSelectCollection = (collection: string) => {
-    setSelectedCollection(collection);
-  };
-
-  const handleRefresh = () => {
-    loadCollections();
-    if (selectedCollection) {
-      loadDocuments();
-    }
-  }, [connectionId]);
-
-  useEffect(() => {
-    loadDatabases();
-  }, [loadDatabases]);
 
   // 加载集合列表
   const loadCollections = useCallback(async () => {
@@ -166,6 +108,10 @@ export function MongoDBBrowser({ connectionId }: MongoDBBrowserProps) {
       loadDocuments();
     }
   };
+
+  useEffect(() => {
+    loadDatabases();
+  }, [loadDatabases]);
 
   const handleAddCollection = async () => {
     if (!connectionId || !selectedDatabase) return;
@@ -296,69 +242,23 @@ export function MongoDBBrowser({ connectionId }: MongoDBBrowserProps) {
   };
 
   // 动态生成表格列
-  const generateColumns = useCallback((): ColumnDef<MongoDocument>[] => {
+  // 获取所有可能的字段
+  const getAllFields = useCallback(() => {
     if (documents.length === 0) return [];
-
-    // 获取所有可能的字段
     const allFields = new Set<string>();
     documents.forEach(doc => {
-      Object.keys(doc).forEach(key => {
-        if (key !== '_id') allFields.add(key);
-      });
+      Object.keys(doc).forEach(key => allFields.add(key));
     });
-
-    const fields = Array.from(allFields);
-
-    const cols: ColumnDef<MongoDocument>[] = [
-      {
-        accessorKey: '_id',
-        header: '_id',
-        cell: ({ row }) => (
-          <span className="font-mono text-xs" title={String(row.original._id)}>
-            {String(row.original._id).substring(0, 12)}...
-          </span>
-        ),
-      },
-      ...fields.map(field => ({
-        accessorKey: field,
-        header: field,
-        cell: ({ row }) => {
-          const value = (row.original as any)[field];
-          if (value === null || value === undefined) return <span className="text-muted-foreground">-</span>;
-          if (typeof value === 'object') {
-            return <span className="text-xs font-mono">{JSON.stringify(value)}</span>;
-          }
-          return <span>{String(value)}</span>;
-        },
-      })),
-      {
-        id: 'actions',
-        header: '操作',
-        cell: ({ row }) => (
-          <div className="flex gap-2">
-            <Button
-              size="icon-xs"
-              variant="ghost"
-              onClick={() => handleEditDocument(row.original)}
-            >
-              编辑
-            </Button>
-            <Button
-              size="icon-xs"
-              variant="ghost"
-              onClick={() => handleDeleteDocument(row.original)}
-            >
-              <Trash2 className="h-3 w-3" />
-            </Button>
-          </div>
-        ),
-      },
-    ];
-
-    return cols;
+    return Array.from(allFields);
   }, [documents]);
 
-  const columns = generateColumns();
+  const renderCellValue = (value: any) => {
+    if (value === null || value === undefined) return <span className="text-muted-foreground">-</span>;
+    if (typeof value === 'object') {
+      return <span className="text-xs font-mono">{JSON.stringify(value)}</span>;
+    }
+    return <span>{String(value)}</span>;
+  };
 
   if (!connectionId) {
     return (
@@ -367,6 +267,8 @@ export function MongoDBBrowser({ connectionId }: MongoDBBrowserProps) {
       </div>
     );
   }
+
+  const fields = getAllFields();
 
   return (
     <div className="flex h-full">
@@ -419,7 +321,7 @@ export function MongoDBBrowser({ connectionId }: MongoDBBrowserProps) {
                 <div className="relative flex-1">
                   <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                   <Input
-                    placeholder="输入 JSON 过滤条件，如: {\"age\": 25}"
+                    placeholder='输入 JSON 过滤条件，如: {"age": 25}'
                     value={filterQuery}
                     onChange={(e: ChangeEvent<HTMLInputElement>) => setFilterQuery(e.target.value)}
                     className="pl-9 font-mono text-sm"
@@ -438,7 +340,53 @@ export function MongoDBBrowser({ connectionId }: MongoDBBrowserProps) {
                   <RefreshCw className="h-6 w-6 animate-spin text-muted-foreground" />
                 </div>
               ) : documents.length > 0 ? (
-                <DataTable columns={columns} data={documents} />
+                <div className="overflow-auto border rounded-md">
+                  <table className="min-w-full text-sm border-collapse">
+                    <thead>
+                      <tr className="border-b bg-muted/50">
+                        <th className="px-4 py-2 text-left font-medium">_id</th>
+                        {fields.map(field => (
+                          <th key={field} className="px-4 py-2 text-left font-medium">{field}</th>
+                        ))}
+                        <th className="px-4 py-2 text-left font-medium">操作</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {documents.map((doc, idx) => (
+                        <tr key={idx} className="border-b hover:bg-muted/50">
+                          <td className="px-4 py-2">
+                            <span className="font-mono text-xs" title={String(doc._id)}>
+                              {String(doc._id).substring(0, 12)}...
+                            </span>
+                          </td>
+                          {fields.map(field => (
+                            <td key={field} className="px-4 py-2">
+                              {renderCellValue(doc[field])}
+                            </td>
+                          ))}
+                          <td className="px-4 py-2">
+                            <div className="flex gap-2">
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => handleEditDocument(doc)}
+                              >
+                                编辑
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => handleDeleteDocument(doc)}
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </Button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               ) : (
                 <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
                   {filterQuery === '{}' ? '暂无文档' : '未找到匹配的文档'}

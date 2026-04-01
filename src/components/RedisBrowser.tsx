@@ -278,7 +278,7 @@ export function RedisBrowser({ connectionId }: RedisBrowserProps) {
       const result = await invoke('execute_redis_command', {
         connId: connectionId,
         command: commandInput.trim(),
-      });
+      }) as string;
 
       setCommandOutput(result || 'OK');
     } catch (error) {
@@ -295,7 +295,7 @@ export function RedisBrowser({ connectionId }: RedisBrowserProps) {
       const result = await invoke('export_redis_keys', {
         connId: connectionId,
         pattern,
-      });
+      }) as string;
 
       const blob = new Blob([result], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
@@ -618,7 +618,7 @@ export function RedisBrowser({ connectionId }: RedisBrowserProps) {
         score: newScore,
       });
       
-      const newData = zsetData.map(([m, s]) => m === member ? [m, newScore] : [m, s]);
+      const newData: [string, number][] = zsetData.map(([m, s]) => m === member ? [m, newScore] : [m, s]);
       setZsetData(newData);
       loadDbInfo();
     } catch (error) {
