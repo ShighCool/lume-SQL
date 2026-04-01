@@ -886,8 +886,8 @@ export function MySQLBrowser({ connectionId, database, table }: MySQLBrowserProp
               </div>
             </div>
             
-            {/* 表格滚动区域 - 固定高度 680px（15条数据+表头） */}
-            <div className="overflow-auto p-4 border rounded-md shrink-0" style={{ height: '680px', minHeight: '680px', maxWidth: '100%' }}>
+            {/* 表格滚动区域 - 固定高度 620px（刚好显示15行数据） */}
+            <div className="overflow-auto p-4 border rounded-md shrink-0" style={{ height: '620px', minHeight: '620px', maxWidth: '100%' }}>
               <table className="text-sm border-collapse" style={{ width: '100%', tableLayout: 'fixed' }}>
                 <colgroup>
                   <col className="w-10" />
