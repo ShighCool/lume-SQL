@@ -47,7 +47,7 @@ export function MySQLBrowser({ connectionId, database, table }: MySQLBrowserProp
   const [tableSchema, setTableSchema] = useState<ColumnInfo[]>([]);
   const [loading, setLoading] = useState(false);
   const [page, setPage] = useState(1);
-  const [pageSize] = useState(50);
+  const [pageSize] = useState(15);
   const [sqlQuery, setSqlQuery] = useState('');
   const [queryResult, setQueryResult] = useState<TableData | null>(null);
   const [selectedRows, setSelectedRows] = useState<Set<number>>(new Set());
@@ -843,7 +843,7 @@ export function MySQLBrowser({ connectionId, database, table }: MySQLBrowserProp
           </TooltipProvider>
 
       {/* SQL 编辑器：固定高度 200px，禁止压缩 */}
-      <div className="flex-shrink-0 p-3 border-b h-[200px]">
+      <div className="flex-shrink-0 p-3 border-b h-[80px]">
         <div className="flex gap-2 h-full">
           <textarea
             value={sqlQuery}
@@ -864,17 +864,12 @@ export function MySQLBrowser({ connectionId, database, table }: MySQLBrowserProp
         </div>
       </div>
 
-      {/* 结果表格：flex-1 占据剩余空间，支持滚动 */}
-      <div className="flex-1 overflow-hidden p-4 min-h-0">
-        {loading && (
-          <div className="flex items-center justify-center h-full">
-            <RefreshCw className="h-6 w-6 animate-spin text-muted-foreground" />
-          </div>
-        )}
-
+      {/* 结果表格区域 */}
+      <div className="flex-1 flex flex-col overflow-hidden">
         {!loading && currentData && (
-          <div className="h-full flex flex-col min-h-0">
-            <div className="flex items-center justify-between mb-3 shrink-0">
+          <>
+            {/* 统计信息栏 */}
+            <div className="flex items-center justify-between px-4 py-2 border-b shrink-0">
               <h3 className="text-sm font-semibold">
                 {queryResult ? '查询结果' : `数据: ${database}.${table}`}
               </h3>
@@ -891,8 +886,9 @@ export function MySQLBrowser({ connectionId, database, table }: MySQLBrowserProp
               </div>
             </div>
             
-            <div className="flex-1 overflow-auto min-h-0 border rounded-md data-table-container">
-              <table className="min-w-[1200px] text-sm border-collapse">
+            {/* 表格滚动区域 - 固定高度 680px（15条数据+表头） */}
+            <div className="overflow-auto p-4 border rounded-md shrink-0" style={{ height: '680px', minHeight: '680px', maxWidth: '100%' }}>
+              <table className="text-sm border-collapse" style={{ width: '100%', tableLayout: 'fixed' }}>
                 <colgroup>
                   <col className="w-10" />
                   {visibleColumns.map((col) => (
@@ -994,8 +990,9 @@ export function MySQLBrowser({ connectionId, database, table }: MySQLBrowserProp
               </table>
             </div>
 
+            {/* 分页按钮栏 */}
             {!queryResult && tableData && (
-              <div className="flex items-center justify-between mt-4 pt-2 border-t shrink-0">
+              <div className="flex items-center justify-between px-4 py-2 border-t shrink-0">
                 <Button
                   variant="outline"
                   size="sm"
@@ -1017,11 +1014,11 @@ export function MySQLBrowser({ connectionId, database, table }: MySQLBrowserProp
                 </Button>
               </div>
             )}
-          </div>
+          </>
         )}
 
         {!loading && !currentData && (
-          <div className="flex items-center justify-center h-full text-muted-foreground">
+          <div className="flex-1 flex items-center justify-center">
             请选择一个表或执行 SQL 查询
           </div>
         )}
