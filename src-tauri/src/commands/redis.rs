@@ -1298,29 +1298,25 @@ fn create_client(
     password: &Option<String>,
     db: i64,
 ) -> Result<Client, String> {
-    let addr = format!("{}:{}", host, port);
-    let client = Client::open(addr)
-        .map_err(|e| format!("Failed to create client: {}", e))?;
-
-    let mut conn = client.get_connection()
-        .map_err(|e| format!("Connection failed: {}", e))?;
-
-    // 只有当密码不为空时才进行认证
+    // 构建 Redis URL
+    let mut url = format!("redis://{}:{}", host, port);
+    
+    // 如果有密码，添加到 URL 中
     if let Some(pwd) = password {
         if !pwd.is_empty() {
-            let _: String = redis::cmd("AUTH")
-                .arg(pwd)
-                .query(&mut conn)
-                .map_err(|e| format!("Authentication failed: {}", e))?;
+            // URL 编码密码中的特殊字符
+            let encoded_pwd = pwd.replace(':', "%3A").replace("@", "%40").replace("/", "%2F");
+            url = format!("redis://:{}@{}:{}", encoded_pwd, host, port);
         }
     }
-
+    
+    // 如果指定了数据库索引，添加到 URL 中
     if db > 0 {
-        let _: () = redis::cmd("SELECT")
-            .arg(db)
-            .query(&mut conn)
-            .map_err(|e| format!("Select database failed: {}", e))?;
+        url = format!("{}/{}", url, db);
     }
+    
+    let client = Client::open(url)
+        .map_err(|e| format!("Failed to create client: {}", e))?;
 
     Ok(client)
 }
