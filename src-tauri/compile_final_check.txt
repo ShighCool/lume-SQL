@@ -1,0 +1,7 @@
+﻿cargo :     Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.09s
+At line:1 char:35
++ cd "F:\centos\queryDB\src-tauri"; cargo check 2>&1 | Out-File -FilePa ...
++                                   ~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (    Finished `d...get(s) in 1.09s:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 

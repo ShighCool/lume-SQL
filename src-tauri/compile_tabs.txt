@@ -1,0 +1,241 @@
+﻿cargo :     Checking querydb v0.1.0 (F:\centos\queryDB\src-tauri)
+At line:1 char:35
++ cd "F:\centos\queryDB\src-tauri"; cargo check 2>&1 | Out-File -FilePa ...
++                                   ~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (    Checking qu...ryDB\src-tauri):String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+error[E0252]: the name `Mutex` is defined multiple times
+    --> src\commands\mysql.rs:3207:5
+     |
+   6 | use std::sync::Mutex;
+     |     ---------------- previous import of the type `Mutex` here
+...
+3207 | use tokio::sync::Mutex;
+     |     ^^^^^^^^^^^^^^^^^^ `Mutex` reimported here
+     |
+     = note: `Mutex` must be defined only once in the type namespace of this module
+help: you can use `as` to change the binding name of the import
+     |
+3207 | use tokio::sync::Mutex as OtherMutex;
+     |                        +++++++++++++
+
+warning: unused import: `tokio::sync::Mutex`
+    --> src\commands\mysql.rs:3207:5
+     |
+3207 | use tokio::sync::Mutex;
+     |     ^^^^^^^^^^^^^^^^^^
+     |
+     = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+error[E0728]: `await` is only allowed inside `async` functions and blocks
+    --> src\commands\mysql.rs:3340:50
+     |
+3339 |         .map(|| {
+     |              -- this is not `async`
+3340 |             let connections = connections.lock().await;
+     |                                                  ^^^^^ only allowed inside `async` functions and blocks
+
+warning: variable does not need to be mutable
+    --> src\commands\mysql.rs:3053:9
+     |
+3053 |     let mut params: Vec<String> = Vec::new();
+     |         ----^^^^^^
+     |         |
+     |         help: remove this `mut`
+     |
+     = note: `#[warn(unused_mut)]` (part of `#[warn(unused)]`) on by default
+
+error[E0277]: `Result<std::sync::MutexGuard<'_, bool>, PoisonError<std::sync::MutexGuard<'_, bool>>>` is not a future
+    --> src\commands\mysql.rs:3230:49
+     |
+3230 |     let mut running = API_SERVER_RUNNING.lock().await;
+     |                                                 ^^^^^ `Result<std::sync::MutexGuard<'_, bool>, PoisonError<std::sync::MutexGuard<'_, bool>>>` is not a future
+     |
+     = help: the trait `warp::Future` is not implemented for `Result<std::sync::MutexGuard<'_, bool>, PoisonError<std::sync::MutexGuard<'_, bool>>>`
+     = note: Result<std::sync::MutexGuard<'_, bool>, PoisonError<std::sync::MutexGuard<'_, bool>>> must be a future or must implement `IntoFuture` to be awaited
+     = note: required for `Result<std::sync::MutexGuard<'_, bool>, PoisonError<std::sync::MutexGuard<'_, bool>>>` to implement `std::future::IntoFuture`
+help: remove the `.await`
+     |
+3230 -     let mut running = API_SERVER_RUNNING.lock().await;
+3230 +     let mut running = API_SERVER_RUNNING.lock();
+     |
+
+error[E0277]: `Result<std::sync::MutexGuard<'_, u16>, PoisonError<std::sync::MutexGuard<'_, u16>>>` is not a future
+    --> src\commands\mysql.rs:3237:29
+     |
+3237 |     *API_SERVER_PORT.lock().await = port;
+     |                             ^^^^^ `Result<std::sync::MutexGuard<'_, u16>, PoisonError<std::sync::MutexGuard<'_, u16>>>` is not a future
+     |
+     = help: the trait `warp::Future` is not implemented for `Result<std::sync::MutexGuard<'_, u16>, PoisonError<std::sync::MutexGuard<'_, u16>>>`
+     = note: Result<std::sync::MutexGuard<'_, u16>, PoisonError<std::sync::MutexGuard<'_, u16>>> must be a future or must implement `IntoFuture` to be awaited
+     = note: required for `Result<std::sync::MutexGuard<'_, u16>, PoisonError<std::sync::MutexGuard<'_, u16>>>` to implement `std::future::IntoFuture`
+help: remove the `.await`
+     |
+3237 -     *API_SERVER_PORT.lock().await = port;
+3237 +     *API_SERVER_PORT.lock() = port;
+     |
+
+error[E0599]: no method named `clone` found for struct `mysql::CONNECTIONS` in the current scope
+    --> src\commands\mysql.rs:3240:35
+     |
+   8 | / lazy_static! {
+   9 | |     static ref CONNECTIONS: Mutex<HashMap<String, Pool>> = Mutex::new(HashMap::new());
+  10 | | }
+     | |_- method `clone` not found for this struct
+...
+3240 |       let connections = CONNECTIONS.clone();
+     |                                     ^^^^^ method not found in `mysql::CONNECTIONS`
+     |
+     = help: items from traits can only be used if the trait is implemented and in scope
+     = note: the following trait defines an item `clone`, perhaps you need to implement it:
+             candidate #1: `Clone`
+
+error[E0282]: type annotations needed
+    --> src\commands\mysql.rs:3259:25
+     |
+3259 |                     let connections = connections.lock().await;
+     |                         ^^^^^^^^^^^
+3260 |                     
+3261 |                     if let Some(pool) = connections.get(&request.conn_id) {
+     |                                         ----------- type must be known at this point
+     |
+help: consider giving `connections` an explicit type
+     |
+3259 |                     let connections: /* Type */ = connections.lock().await;
+     |                                    ++++++++++++
+
+error[E0282]: type annotations needed
+    --> src\commands\mysql.rs:3262:47
+     |
+3262 |                         if let Ok(mut conn) = pool.get_conn() {
+     |                                               ^^^^ cannot infer type
+
+error[E0282]: type annotations needed
+    --> src\commands\mysql.rs:3263:35
+     |
+3263 | ...                   match conn.query(&request.sql) {
+     |                             ^^^^ cannot infer type
+
+error[E0282]: type annotations needed
+    --> src\commands\mysql.rs:3265:66
+     |
+3265 | ...                   let data: Vec<Vec<String>> = rows
+     |                                                    ^^^^ cannot infer type
+
+error[E0282]: type annotations needed
+    --> src\commands\mysql.rs:3267:47
+     |
+3267 | ...                   .map(|row| {
+     |                             ^^^
+3268 | ...                       row.clone()
+     |                           --- type must be known at this point
+     |
+help: consider giving this closure parameter an explicit type
+     |
+3267 |                                         .map(|row: /* Type */| {
+     |                                                  ++++++++++++
+
+error[E0277]: the trait bound `warp::cors::Builder: warp::filter::FilterBase` is not satisfied
+    --> src\commands\mysql.rs:3347:10
+     |
+3347 |         .and(warp::cors())
+     |          ^^^ the trait `warp::filter::FilterBase` is not implemented for `warp::cors::Builder`
+     |
+     = help: the following other types implement trait `warp::filter::FilterBase`:
+               BoxedFilter<T>
+               FormOptions
+               cors::internal::CorsFilter<F>
+               log::internal::WithLog<FN, F>
+               trace::internal::WithTrace<FN, F>
+               warp::filter::and::And<T, U>
+               warp::filter::and_then::AndThen<T, F>
+               warp::filter::map::Map<T, F>
+             and 8 others
+
+error[E0599]: the method `and` exists for struct `And<impl Filter + FilterBase<Extract = (), Error = ...> + Copy, ...>`, but its trait bounds were not satisfied
+    --> src\commands\mysql.rs:3348:10
+     |
+3346 |       let routes = warp::any()
+     |  __________________-
+3347 | |         .and(warp::cors())
+3348 | |         .and(route_query.or(route_health).or(route_connections));
+     | |         -^^^ method cannot be called due to unsatisfied trait bounds
+     | |_________|
+     |
+     |
+    ::: C:\Users\4399\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\warp-0.3.7\src\filter\and.rs:13:1
+     |
+  13 |   pub struct And<T, U> {
+     |   -------------------- doesn't satisfy `_: FilterBase` or `_: Filter`
+     |
+     = note: the following trait bounds were not satisfied:
+             `warp::filter::and::And<impl warp::Filter + warp::filter::FilterBase<Extract = (), Error = Infallible> + std::marker::Copy, warp::cors::Builder>: warp::filter::FilterBase`
+             which is required by `warp::filter::and::And<impl warp::Filter + warp::filter::FilterBase<Extract = (), Error = Infallible> + std::marker::Copy, warp::cors::Builder>: warp::Filter
+`
+             `&warp::filter::and::And<impl warp::Filter + warp::filter::FilterBase<Extract = (), Error = Infallible> + std::marker::Copy, warp::cors::Builder>: warp::filter::FilterBase`
+             which is required by `&warp::filter::and::And<impl warp::Filter + warp::filter::FilterBase<Extract = (), Error = Infallible> + std::marker::Copy, warp::cors::Builder>: warp::Filte
+r`
+             `&mut warp::filter::and::And<impl warp::Filter + warp::filter::FilterBase<Extract = (), Error = Infallible> + std::marker::Copy, warp::cors::Builder>: warp::filter::FilterBase`
+             which is required by `&mut warp::filter::and::And<impl warp::Filter + warp::filter::FilterBase<Extract = (), Error = Infallible> + std::marker::Copy, warp::cors::Builder>: warp::F
+ilter`
+     = note: the full name for the type has been written to 'F:\centos\queryDB\src-tauri\target\debug\deps\querydb_lib-2649d4e5307c02aa.long-type-14062380197331033880.txt'
+     = note: consider using `--verbose` to print the full type name to the console
+
+error[E0277]: `Result<std::sync::MutexGuard<'_, bool>, PoisonError<std::sync::MutexGuard<'_, bool>>>` is not a future
+    --> src\commands\mysql.rs:3362:49
+     |
+3362 |     let mut running = API_SERVER_RUNNING.lock().await;
+     |                                                 ^^^^^ `Result<std::sync::MutexGuard<'_, bool>, PoisonError<std::sync::MutexGuard<'_, bool>>>` is not a future
+     |
+     = help: the trait `warp::Future` is not implemented for `Result<std::sync::MutexGuard<'_, bool>, PoisonError<std::sync::MutexGuard<'_, bool>>>`
+     = note: Result<std::sync::MutexGuard<'_, bool>, PoisonError<std::sync::MutexGuard<'_, bool>>> must be a future or must implement `IntoFuture` to be awaited
+     = note: required for `Result<std::sync::MutexGuard<'_, bool>, PoisonError<std::sync::MutexGuard<'_, bool>>>` to implement `std::future::IntoFuture`
+help: remove the `.await`
+     |
+3362 -     let mut running = API_SERVER_RUNNING.lock().await;
+3362 +     let mut running = API_SERVER_RUNNING.lock();
+     |
+
+error[E0277]: `Result<std::sync::MutexGuard<'_, bool>, PoisonError<std::sync::MutexGuard<'_, bool>>>` is not a future
+    --> src\commands\mysql.rs:3374:45
+     |
+3374 |     let running = API_SERVER_RUNNING.lock().await;
+     |                                             ^^^^^ `Result<std::sync::MutexGuard<'_, bool>, PoisonError<std::sync::MutexGuard<'_, bool>>>` is not a future
+     |
+     = help: the trait `warp::Future` is not implemented for `Result<std::sync::MutexGuard<'_, bool>, PoisonError<std::sync::MutexGuard<'_, bool>>>`
+     = note: Result<std::sync::MutexGuard<'_, bool>, PoisonError<std::sync::MutexGuard<'_, bool>>> must be a future or must implement `IntoFuture` to be awaited
+     = note: required for `Result<std::sync::MutexGuard<'_, bool>, PoisonError<std::sync::MutexGuard<'_, bool>>>` to implement `std::future::IntoFuture`
+help: remove the `.await`
+     |
+3374 -     let running = API_SERVER_RUNNING.lock().await;
+3374 +     let running = API_SERVER_RUNNING.lock();
+     |
+
+error[E0277]: `Result<std::sync::MutexGuard<'_, u16>, PoisonError<std::sync::MutexGuard<'_, u16>>>` is not a future
+    --> src\commands\mysql.rs:3380:39
+     |
+3380 |     let port = API_SERVER_PORT.lock().await;
+     |                                       ^^^^^ `Result<std::sync::MutexGuard<'_, u16>, PoisonError<std::sync::MutexGuard<'_, u16>>>` is not a future
+     |
+     = help: the trait `warp::Future` is not implemented for `Result<std::sync::MutexGuard<'_, u16>, PoisonError<std::sync::MutexGuard<'_, u16>>>`
+     = note: Result<std::sync::MutexGuard<'_, u16>, PoisonError<std::sync::MutexGuard<'_, u16>>> must be a future or must implement `IntoFuture` to be awaited
+     = note: required for `Result<std::sync::MutexGuard<'_, u16>, PoisonError<std::sync::MutexGuard<'_, u16>>>` to implement `std::future::IntoFuture`
+help: remove the `.await`
+     |
+3380 -     let port = API_SERVER_PORT.lock().await;
+3380 +     let port = API_SERVER_PORT.lock();
+     |
+
+warning: unused variable: `params`
+    --> src\commands\mysql.rs:3053:9
+     |
+3053 |     let mut params: Vec<String> = Vec::new();
+     |         ^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_params`
+     |
+     = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+Some errors have detailed explanations: E0252, E0277, E0282, E0599, E0728.
+For more information about an error, try `rustc --explain E0252`.
+warning: `querydb` (lib) generated 3 warnings
+error: could not compile `querydb` (lib) due to 15 previous errors; 3 warnings emitted

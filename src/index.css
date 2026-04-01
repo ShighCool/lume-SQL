@@ -84,19 +84,19 @@
 }
 
 .dark {
-    --background: oklch(0.145 0 0);
+    --background: oklch(0.18 0 0);
     --foreground: oklch(0.985 0 0);
-    --card: oklch(0.205 0 0);
+    --card: oklch(0.22 0 0);
     --card-foreground: oklch(0.985 0 0);
-    --popover: oklch(0.205 0 0);
+    --popover: oklch(0.22 0 0);
     --popover-foreground: oklch(0.985 0 0);
     --primary: oklch(0.922 0 0);
     --primary-foreground: oklch(0.205 0 0);
-    --secondary: oklch(0.269 0 0);
+    --secondary: oklch(0.29 0 0);
     --secondary-foreground: oklch(0.985 0 0);
-    --muted: oklch(0.269 0 0);
+    --muted: oklch(0.29 0 0);
     --muted-foreground: oklch(0.708 0 0);
-    --accent: oklch(0.269 0 0);
+    --accent: oklch(0.29 0 0);
     --accent-foreground: oklch(0.985 0 0);
     --destructive: oklch(0.704 0.191 22.216);
     --border: oklch(1 0 0 / 10%);
@@ -107,11 +107,11 @@
     --chart-3: oklch(0.439 0 0);
     --chart-4: oklch(0.371 0 0);
     --chart-5: oklch(0.269 0 0);
-    --sidebar: oklch(0.205 0 0);
+    --sidebar: oklch(0.22 0 0);
     --sidebar-foreground: oklch(0.985 0 0);
     --sidebar-primary: oklch(0.488 0.243 264.376);
     --sidebar-primary-foreground: oklch(0.985 0 0);
-    --sidebar-accent: oklch(0.269 0 0);
+    --sidebar-accent: oklch(0.29 0 0);
     --sidebar-accent-foreground: oklch(0.985 0 0);
     --sidebar-border: oklch(1 0 0 / 10%);
     --sidebar-ring: oklch(0.556 0 0);
@@ -120,11 +120,62 @@
 @layer base {
   * {
     @apply border-border outline-ring/50;
-    }
+  }
   body {
     @apply bg-background text-foreground;
-    }
+  }
   html {
     @apply font-sans;
-    }
+  }
+}
+
+/* 自定义滚动条样式 - Element UI 官方风格 */
+
+/* 整体滚动条宽度 */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+/* 滚动条轨道 */
+::-webkit-scrollbar-track {
+  background: transparent;
+  border-radius: 3px;
+}
+
+/* 滚动条滑块 - 默认隐藏 */
+::-webkit-scrollbar-thumb {
+  background: #c0c4cc;
+  border-radius: 3px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.3s, background-color 0.3s;
+  max-height: 40px !important;
+}
+
+/* 滑块悬停 */
+::-webkit-scrollbar-thumb:hover {
+  background: #909399;
+}
+
+/* 滚动条角落 */
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* hover 容器时显示滚动条 */
+*:hover::-webkit-scrollbar-thumb {
+  opacity: 1;
+}
+
+/* 浅色主题滚动条 */
+.light ::-webkit-scrollbar-track {
+  background: transparent;
+}
+.light ::-webkit-scrollbar-thumb {
+  background: #c0c4cc;
+  opacity: 0;
+}
+.light ::-webkit-scrollbar-thumb:hover {
+  background: #909399;
 }
