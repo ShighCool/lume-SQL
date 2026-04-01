@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { Play, RefreshCw, ChevronRight, ChevronDown, Plus, Trash2, Edit, Search, Settings, Columns, Copy, ZoomIn, Download, LayoutTemplate, Check, Clock, Layout, X, BarChart3, Database, GitCompare, History, Table } from 'lucide-react';
+import { Play, RefreshCw, ChevronRight, ChevronDown, Plus, Trash2, Edit, Search, Settings, Columns, Copy, ZoomIn, Download, LayoutTemplate, Check, Clock, Layout, X, BarChart3, Database, GitCompare, History, Table, Maximize2 } from 'lucide-react';
 import { Button } from './ui/button';
 import { Checkbox } from './ui/checkbox';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from './ui/dialog';
@@ -42,12 +42,16 @@ interface ColumnInfo {
 }
 
 export function MySQLBrowser({ connectionId, database, table }: MySQLBrowserProps) {
-  const { showSchemaDialog, setShowSchemaDialog, showTableDesignDialog, setShowTableDesignDialog } = useConnectionStore();
+  const { showSchemaDialog, setShowSchemaDialog, showTableDesignDialog, setShowTableDesignDialog, connections } = useConnectionStore();
   const [tableData, setTableData] = useState<TableData | null>(null);
   const [tableSchema, setTableSchema] = useState<ColumnInfo[]>([]);
   const [loading, setLoading] = useState(false);
   const [page, setPage] = useState(1);
-  const [pageSize] = useState(50);
+
+  // 获取连接配置中的默认查询限制
+  const connection = connections.find((c) => c.id === connectionId);
+  const defaultQueryLimit = connection?.config.mysql?.advancedOptions?.defaultQueryLimit || 100;
+  const [pageSize] = useState(defaultQueryLimit);
   const [sqlQuery, setSqlQuery] = useState('');
   const [queryResult, setQueryResult] = useState<TableData | null>(null);
   const [selectedRows, setSelectedRows] = useState<Set<number>>(new Set());
@@ -57,6 +61,9 @@ export function MySQLBrowser({ connectionId, database, table }: MySQLBrowserProp
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [showSearchDialog, setShowSearchDialog] = useState(false);
   const [showColumnSelector, setShowColumnSelector] = useState(false);
+  const [showSqlEditorDialog, setShowSqlEditorDialog] = useState(false);
+  const [showCopyTableDialog, setShowCopyTableDialog] = useState(false);
+  const [tableDDL, setTableDDL] = useState('');
   const [schemaLoading, setSchemaLoading] = useState(false);
   const [showCreateTableDialog, setShowCreateTableDialog] = useState(false);
   const [editingRow, setEditingRow] = useState<number | null>(null);
@@ -432,6 +439,22 @@ export function MySQLBrowser({ connectionId, database, table }: MySQLBrowserProp
     setColumnVisibility(prev => ({ ...prev, [columnName]: !prev[columnName] }));
   };
 
+  const handleCopyTable = async () => {
+    if (!connectionId || !database || !table) return;
+    try {
+      const ddl: string = await invoke('get_table_ddl', {
+        connId: connectionId,
+        database,
+        table,
+      });
+      setTableDDL(ddl);
+      setShowCopyTableDialog(true);
+    } catch (error) {
+      console.error('获取表DDL失败:', error);
+      alert(`获取表DDL失败: ${error}`);
+    }
+  };
+
   const handleDeleteSelected = () => {
     if (!table || selectedRows.size === 0) return;
     const idColumn = currentColumns[0];
@@ -658,8 +681,8 @@ export function MySQLBrowser({ connectionId, database, table }: MySQLBrowserProp
   const visibleColumns = currentColumns.filter(col => columnVisibility[col] !== false);
 
   return (
-    <div className="flex-1 flex flex-col overflow-hidden">
-      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)} className="flex-1 flex flex-col">
+    <div className="flex-1 flex flex-col h-full overflow-hidden">
+      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)} className="flex-1 flex flex-col h-full min-h-0 overflow-hidden">
         <TabsList className="w-full justify-start border-b rounded-none h-10 px-3">
           <TabsTrigger value="data" className="data-[state=active]:bg-background">
             数据
@@ -675,7 +698,7 @@ export function MySQLBrowser({ connectionId, database, table }: MySQLBrowserProp
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="data" className="flex-1 flex flex-col m-0 p-0 overflow-hidden">
+        <TabsContent value="data" className="flex-1 flex flex-col m-0 p-0 overflow-hidden min-h-0">
           <TooltipProvider>
             {/* 工具栏容器：固定高度，禁止压缩，支持横向滚动 */}
             <div className="flex-shrink-0 border-b">
@@ -684,18 +707,16 @@ export function MySQLBrowser({ connectionId, database, table }: MySQLBrowserProp
                 {/* 第一组：新增、删除 */}
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <Button size="sm" variant="ghost" onClick={handleOpenAddDialog} disabled={!table}>
-                      <Plus className="h-3.5 w-3.5 mr-1.5" />
-                      新增
+                    <Button size="icon" variant="ghost" onClick={handleOpenAddDialog} disabled={!table} title="新增">
+                      <Plus className="h-4 w-4" />
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent>新增一条记录</TooltipContent>
                 </Tooltip>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <Button size="sm" variant="ghost" onClick={handleDeleteSelected} disabled={selectedRows.size === 0}>
-                      <Trash2 className="h-3.5 w-3.5 mr-1.5" />
-                      删除
+                    <Button size="icon" variant="ghost" onClick={handleDeleteSelected} disabled={selectedRows.size === 0} title="删除">
+                      <Trash2 className="h-4 w-4" />
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent>删除选中的记录</TooltipContent>
@@ -707,18 +728,16 @@ export function MySQLBrowser({ connectionId, database, table }: MySQLBrowserProp
                 {/* 第二组：设计表、复制表 */}
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <Button size="sm" variant="ghost" onClick={() => setShowTableDesignDialog(true)} disabled={!table}>
-                      <Layout className="h-3.5 w-3.5 mr-1.5" />
-                      设计表
+                    <Button size="icon" variant="ghost" onClick={() => setShowTableDesignDialog(true)} disabled={!table} title="设计表">
+                      <Layout className="h-4 w-4" />
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent>设计表结构</TooltipContent>
                 </Tooltip>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <Button size="sm" variant="ghost" onClick={() => alert('复制表功能开发中')} disabled={!table}>
-                      <Copy className="h-3.5 w-3.5 mr-1.5" />
-                      复制表
+                    <Button size="icon" variant="ghost" onClick={handleCopyTable} disabled={!table} title="复制表">
+                      <Copy className="h-4 w-4" />
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent>复制表结构和数据</TooltipContent>
@@ -732,9 +751,8 @@ export function MySQLBrowser({ connectionId, database, table }: MySQLBrowserProp
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <DropdownMenuTrigger asChild>
-                        <Button size="sm" variant="ghost" disabled={!currentData || currentData.rows.length === 0}>
-                          <Download className="h-3.5 w-3.5 mr-1.5" />
-                          导出
+                        <Button size="icon" variant="ghost" disabled={!currentData || currentData.rows.length === 0} title="导出">
+                          <Download className="h-4 w-4" />
                         </Button>
                       </DropdownMenuTrigger>
                     </TooltipTrigger>
@@ -751,9 +769,8 @@ export function MySQLBrowser({ connectionId, database, table }: MySQLBrowserProp
                 </DropdownMenu>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <Button size="sm" variant="ghost" onClick={loadTableData} disabled={!table}>
-                      <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
-                      刷新
+                    <Button size="icon" variant="ghost" onClick={loadTableData} disabled={!table} title="刷新">
+                      <RefreshCw className="h-4 w-4" />
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent>刷新数据</TooltipContent>
@@ -765,27 +782,24 @@ export function MySQLBrowser({ connectionId, database, table }: MySQLBrowserProp
                 {/* 第四组：开始事务、提交、回滚 */}
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <Button size="sm" variant="ghost" onClick={handleBeginTransaction} disabled={!connectionId || inTransaction}>
-                      <Play className="h-3.5 w-3.5 mr-1.5" />
-                      开始事务
+                    <Button size="icon" variant="ghost" onClick={handleBeginTransaction} disabled={!connectionId || inTransaction} title="开始事务">
+                      <Play className="h-4 w-4" />
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent>开始新事务</TooltipContent>
                 </Tooltip>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <Button size="sm" variant="ghost" onClick={handleCommitTransaction} disabled={!inTransaction}>
-                      <Check className="h-3.5 w-3.5 mr-1.5" />
-                      提交
+                    <Button size="icon" variant="ghost" onClick={handleCommitTransaction} disabled={!inTransaction} title="提交">
+                      <Check className="h-4 w-4" />
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent>提交当前事务</TooltipContent>
                 </Tooltip>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <Button size="sm" variant="ghost" onClick={handleRollbackTransaction} disabled={!inTransaction}>
-                      <X className="h-3.5 w-3.5 mr-1.5" />
-                      回滚
+                    <Button size="icon" variant="ghost" onClick={handleRollbackTransaction} disabled={!inTransaction} title="回滚">
+                      <X className="h-4 w-4" />
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent>回滚当前事务</TooltipContent>
@@ -845,33 +859,43 @@ export function MySQLBrowser({ connectionId, database, table }: MySQLBrowserProp
       {/* SQL 编辑器：固定高度 200px，禁止压缩 */}
       <div className="flex-shrink-0 p-3 border-b h-[80px]">
         <div className="flex gap-2 h-full">
-          <textarea
-            value={sqlQuery}
-            onChange={(e) => setSqlQuery(e.target.value)}
-            placeholder="输入 SQL 查询..."
-            className="flex-1 h-full p-2 text-sm border rounded-md resize-none font-mono"
-          />
-          <div className="flex flex-col gap-2">
-            <Button onClick={executeQuery} disabled={loading || !sqlQuery.trim()}>
-              <Play className="h-4 w-4 mr-2" />
-              执行
+          <div className="flex-1 relative">
+            <textarea
+              value={sqlQuery}
+              onChange={(e) => setSqlQuery(e.target.value)}
+              placeholder="输入 SQL 查询..."
+              className="w-full h-full p-2 text-sm border rounded-md resize-none font-mono pr-10"
+            />
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              className="absolute right-2 bottom-2 opacity-50 hover:opacity-100"
+              onClick={() => setShowSqlEditorDialog(true)}
+              title="展开编辑"
+            >
+              <Maximize2 className="h-3 w-3" />
             </Button>
-            <Button onClick={explainQuery} disabled={loading || !sqlQuery.trim()} variant="outline">
-              <RefreshCw className="h-4 w-4 mr-2" />
-              执行计划
+          </div>
+          <div className="flex gap-2">
+            <Button onClick={executeQuery} disabled={loading || !sqlQuery.trim()} size="icon" title="执行">
+              <Play className="h-4 w-4" />
+            </Button>
+            <Button onClick={explainQuery} disabled={loading || !sqlQuery.trim()} variant="outline" size="icon" title="执行计划">
+              <RefreshCw className="h-4 w-4" />
             </Button>
           </div>
         </div>
       </div>
 
       {/* 结果表格区域 */}
-      <div className="flex-1 flex flex-col overflow-hidden">
-        {!loading && currentData && (
+      <div className="flex-1 flex flex-col overflow-hidden min-h-0">
+        {currentData && (
           <>
             {/* 统计信息栏和分页 */}
-            <div className="flex items-center justify-between px-4 py-2 border-b shrink-0">
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <div className="flex items-center justify-between px-4 py-2 border-b shrink-0 bg-background shadow-sm">
+              <div className="flex items-center gap-4 text-sm text-muted-foreground">
                 <span>已选 {selectedRows.size} 条</span>
+                {loading && <span className="text-primary animate-pulse">加载中...</span>}
               </div>
               {!queryResult && tableData && (
                 <div className="flex items-center gap-2">
@@ -898,30 +922,33 @@ export function MySQLBrowser({ connectionId, database, table }: MySQLBrowserProp
               )}
             </div>
             
-            {/* 表格滚动区域 - flex-1 占据所有剩余空间 */}
-            <div className="flex-1 overflow-auto p-4 border rounded-md min-h-0" style={{ maxWidth: '100%' }}>
-              <table className="text-sm border-collapse" style={{ width: '100%', tableLayout: 'fixed' }}>
+            {/* 表格滚动区域 - 固定高度 680px */}
+            <div className="overflow-auto p-4 border rounded-md table-transition" style={{ height: '680px', maxWidth: '100%' }}>
+              <table className="text-sm border-collapse" style={{
+                tableLayout: 'fixed',
+                width: `${48 + visibleColumns.length * 180 + 96}px`
+              }}>
                 <colgroup>
-                  <col className="w-10" />
+                  <col style={{ width: '48px' }} />
                   {visibleColumns.map((col) => (
-                    <col key={col} className="w-[150px]" />
+                    <col key={col} style={{ width: '180px' }} />
                   ))}
-                  <col className="w-20" />
+                  <col style={{ width: '96px' }} />
                 </colgroup>
                 <thead className="sticky top-0 bg-background z-20 shadow-sm">
                   <tr>
-                    <th className="px-2 py-2 border-b border-r font-semibold bg-background text-left">
+                    <th className="px-2 py-2 border-b border-r font-semibold bg-background text-left transition-smooth">
                       <Checkbox
                         checked={selectedRows.size === currentData.rows.length && currentData.rows.length > 0}
                         onCheckedChange={handleSelectAll}
                       />
                     </th>
                     {visibleColumns.map((col) => (
-                      <th key={col} className="px-4 py-2 border-b border-r font-semibold text-left whitespace-nowrap bg-background overflow-hidden">
+                      <th key={col} className="px-4 py-2 border-b border-r font-semibold text-left whitespace-nowrap bg-background overflow-hidden transition-smooth">
                         {col}
                       </th>
                     ))}
-                    <th className="px-2 py-2 border-b font-semibold text-left bg-background">
+                    <th className="px-2 py-2 border-b font-semibold text-left bg-background transition-smooth">
                       操作
                     </th>
                   </tr>
@@ -932,8 +959,8 @@ export function MySQLBrowser({ connectionId, database, table }: MySQLBrowserProp
                     const isSelected = selectedRows.has(rowIndex);
                     return (
                       <React.Fragment key={rowIndex}>
-                        <tr className={cn("hover:bg-muted/50", isSelected && "bg-primary/5")}>
-                          <td className="px-2 py-2 border-b border-r sticky left-0 bg-background z-10">
+                        <tr className={cn("hover:bg-muted/50 transition-colors duration-150", isSelected && "bg-primary/5")}>
+                          <td className="px-2 py-2 border-b border-r sticky left-0 bg-background z-10 transition-colors duration-150">
                             <div className="flex items-center gap-1">
                               <Checkbox
                                 checked={isSelected}
@@ -944,26 +971,26 @@ export function MySQLBrowser({ connectionId, database, table }: MySQLBrowserProp
                                 size="icon-xs"
                                 onClick={() => handleToggleExpand(rowIndex)}
                               >
-                                {isExpanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+                                {isExpanded ? <ChevronDown className="h-3 w-3 transition-transform duration-200" /> : <ChevronRight className="h-3 w-3 transition-transform duration-200" />}
                               </Button>
                             </div>
                           </td>
                           {visibleColumns.map((col) => {
                             const colIndex = currentColumns.indexOf(col);
                             return (
-                              <td key={col} className="px-4 py-2 border-b border-r overflow-hidden sticky bg-background group relative">
-                                <div className="truncate" title={row[colIndex] || ''}>
+                              <td key={col} className="px-4 py-2 border-b border-r overflow-hidden group relative transition-colors duration-150">
+                                <div className="truncate transition-opacity duration-150" title={row[colIndex] || ''}>
                                   {row[colIndex] || ''}
                                 </div>
                                 <button
-                                  className="absolute right-1 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-muted cursor-pointer"
+                                  className="absolute right-1 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-muted cursor-pointer transition-all duration-200"
                                   onClick={() => {
                                     const value = row[colIndex] || '';
                                     setViewCellData({ value, columnName: col });
                                     setViewFormat(detectFormat(value));
                                   }}
                                 >
-                                  <ZoomIn className="h-3 w-3" />
+                                  <ZoomIn className="h-3 w-3 transition-transform duration-200" />
                                 </button>
                               </td>
                             );
@@ -983,8 +1010,8 @@ export function MySQLBrowser({ connectionId, database, table }: MySQLBrowserProp
                           <tr className="bg-muted/30">
                             <td className="border-b border-r bg-muted/30 sticky left-0 z-10"></td>
                             <td colSpan={visibleColumns.length + 1} className="border-b">
-                              <div className="p-4">
-                                <pre className="text-xs font-mono bg-background p-3 rounded border overflow-auto">
+                              <div className="p-4 max-w-full">
+                                <pre className="text-xs font-mono bg-background p-3 rounded border overflow-auto max-w-full whitespace-pre-wrap break-all">
                                   {JSON.stringify(
                                     Object.fromEntries(currentColumns.map((col, i) => [col, row[i]])),
                                     null,
@@ -1004,42 +1031,52 @@ export function MySQLBrowser({ connectionId, database, table }: MySQLBrowserProp
           </>
         )}
 
-        {!loading && !currentData && (
+        {!currentData && loading && (
+          <div className="flex-1 flex items-center justify-center">
+            <div className="text-center">
+              <RefreshCw className="h-8 w-8 animate-spin mx-auto mb-3 text-primary" />
+              <p className="text-sm text-muted-foreground">加载数据中...</p>
+            </div>
+          </div>
+        )}
+        {!currentData && !loading && (
           <div className="flex-1 flex items-center justify-center">
             请选择一个表或执行 SQL 查询
           </div>
         )}
       </div>
 
-      {/* 状态栏：固定高度 28px */}
-      <div className="flex-shrink-0 border-t px-3 py-1 flex items-center justify-between bg-muted/30 text-xs text-muted-foreground h-7">
-        <div className="flex items-center gap-4">
-          {connectionId && (
-            <span className="flex items-center gap-1">
-              <Database className="h-3 w-3" />
-              {connectionId}
-            </span>
-          )}
-          {database && (
-            <span className="flex items-center gap-1">
-              <Table className="h-3 w-3" />
-              {database}
-            </span>
-          )}
-          {table && (
-            <span className="flex items-center gap-1">
-              <Columns className="h-3 w-3" />
-              {table}
-            </span>
-          )}
-        </div>
-        <div className="flex items-center gap-4">
-          {queryExecutionTime !== null && (
-            <span>耗时: {queryExecutionTime}ms</span>
-          )}
-          {currentData && (
-            <span>记录: {currentData.total}</span>
-          )}
+      {/* 状态栏：固定高度 28px，支持横向滚动 */}
+      <div className="flex-shrink-0 border-t bg-muted/30 text-xs text-muted-foreground h-7">
+        <div className="px-3 py-1 flex items-center justify-between h-full overflow-x-auto whitespace-nowrap min-w-max">
+          <div className="flex items-center gap-4 flex-shrink-0">
+            {connectionId && (
+              <span className="flex items-center gap-1 flex-shrink-0">
+                <Database className="h-3 w-3" />
+                {connectionId}
+              </span>
+            )}
+            {database && (
+              <span className="flex items-center gap-1 flex-shrink-0">
+                <Table className="h-3 w-3" />
+                {database}
+              </span>
+            )}
+            {table && (
+              <span className="flex items-center gap-1 flex-shrink-0">
+                <Columns className="h-3 w-3" />
+                {table}
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-4 flex-shrink-0">
+            {queryExecutionTime !== null && (
+              <span className="flex-shrink-0">耗时: {queryExecutionTime}ms</span>
+            )}
+            {currentData && (
+              <span className="flex-shrink-0">记录: {currentData.total}</span>
+            )}
+          </div>
         </div>
       </div>
         </TabsContent>
@@ -1057,8 +1094,50 @@ export function MySQLBrowser({ connectionId, database, table }: MySQLBrowserProp
         </TabsContent>
       </Tabs>
 
+      <Dialog open={showSqlEditorDialog} onOpenChange={setShowSqlEditorDialog}>
+        <DialogContent className="max-w-6xl max-h-[80vh] overflow-auto">
+          <DialogHeader>
+            <DialogTitle>SQL 编辑器</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <textarea
+              value={sqlQuery}
+              onChange={(e) => setSqlQuery(e.target.value)}
+              placeholder="输入 SQL 查询..."
+              className="w-full h-[400px] p-3 text-sm border rounded-md resize-none font-mono"
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowSqlEditorDialog(false)}>取消</Button>
+            <Button onClick={() => setShowSqlEditorDialog(false)}>确定</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showCopyTableDialog} onOpenChange={setShowCopyTableDialog}>
+        <DialogContent className="max-w-6xl max-h-[80vh] overflow-auto">
+          <DialogHeader>
+            <DialogTitle>表DDL - {database}.{table}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <textarea
+              value={tableDDL}
+              readOnly
+              className="w-full h-[400px] p-3 text-sm border rounded-md resize-none font-mono bg-muted/30"
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowCopyTableDialog(false)}>关闭</Button>
+            <Button onClick={() => {
+              navigator.clipboard.writeText(tableDDL);
+              alert('DDL已复制到剪贴板');
+            }}>复制</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
-        <DialogContent className="max-w-2xl max-h-[80vh] overflow-auto">
+        <DialogContent className="max-w-6xl max-h-[80vh] overflow-auto">
           <DialogHeader>
             <DialogTitle>编辑记录</DialogTitle>
           </DialogHeader>
@@ -1082,7 +1161,7 @@ export function MySQLBrowser({ connectionId, database, table }: MySQLBrowserProp
       </Dialog>
 
       <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
-        <DialogContent className="max-w-4xl max-h-[80vh] overflow-auto">
+        <DialogContent className="max-w-6xl max-h-[80vh] overflow-auto">
           <DialogHeader>
             <DialogTitle>新增记录</DialogTitle>
           </DialogHeader>
@@ -1132,7 +1211,7 @@ export function MySQLBrowser({ connectionId, database, table }: MySQLBrowserProp
       </Dialog>
 
       <Dialog open={showSchemaDialog} onOpenChange={setShowSchemaDialog}>
-        <DialogContent className="max-h-[80vh] overflow-auto" style={{ width: '1200px', maxWidth: '1200px' }}>
+        <DialogContent className="max-w-7xl max-h-[80vh] overflow-auto" style={{ width: '1400px', maxWidth: '1400px' }}>
           <DialogHeader>
             <div className="flex items-center justify-between">
               <DialogTitle>表结构: {database}.{table}</DialogTitle>
@@ -1192,7 +1271,7 @@ export function MySQLBrowser({ connectionId, database, table }: MySQLBrowserProp
       </Dialog>
 
       <Dialog open={showCreateTableDialog} onOpenChange={setShowCreateTableDialog}>
-        <DialogContent className="max-w-4xl max-h-[80vh] overflow-auto">
+        <DialogContent className="max-w-6xl max-h-[80vh] overflow-auto">
           <DialogHeader>
             <DialogTitle>创建表</DialogTitle>
           </DialogHeader>
@@ -1389,7 +1468,7 @@ export function MySQLBrowser({ connectionId, database, table }: MySQLBrowserProp
 
       {/* EXPLAIN 执行计划对话框 */}
       <Dialog open={showExplainDialog} onOpenChange={setShowExplainDialog}>
-        <DialogContent className="max-w-4xl max-h-[80vh] overflow-auto" style={{ width: '1000px', maxWidth: '1000px' }}>
+        <DialogContent className="max-w-6xl max-h-[80vh] overflow-auto" style={{ width: '1200px', maxWidth: '1200px' }}>
           <DialogHeader>
             <DialogTitle>查询执行计划</DialogTitle>
           </DialogHeader>
@@ -1438,7 +1517,7 @@ export function MySQLBrowser({ connectionId, database, table }: MySQLBrowserProp
 
       {/* 慢查询分析对话框 */}
       <Dialog open={showSlowQueryDialog} onOpenChange={setShowSlowQueryDialog}>
-        <DialogContent className="max-w-3xl max-h-[80vh] overflow-auto" style={{ width: '800px', maxWidth: '800px' }}>
+        <DialogContent className="max-w-6xl max-h-[80vh] overflow-auto" style={{ width: '1000px', maxWidth: '1000px' }}>
           <DialogHeader>
             <DialogTitle>慢查询配置</DialogTitle>
           </DialogHeader>
@@ -1477,7 +1556,7 @@ export function MySQLBrowser({ connectionId, database, table }: MySQLBrowserProp
 
       {/* 数据备份对话框 */}
       <Dialog open={showBackupDialog} onOpenChange={setShowBackupDialog}>
-        <DialogContent className="max-w-4xl max-h-[80vh] overflow-auto" style={{ width: '1200px', maxWidth: '1200px' }}>
+        <DialogContent className="max-w-7xl max-h-[80vh] overflow-auto" style={{ width: '1400px', maxWidth: '1400px' }}>
           <DialogHeader>
             <DialogTitle>数据库备份 - {database}</DialogTitle>
           </DialogHeader>

@@ -1305,11 +1305,14 @@ fn create_client(
     let mut conn = client.get_connection()
         .map_err(|e| format!("Connection failed: {}", e))?;
 
+    // 只有当密码不为空时才进行认证
     if let Some(pwd) = password {
-        let _: String = redis::cmd("AUTH")
-            .arg(pwd)
-            .query(&mut conn)
-            .map_err(|e| format!("Authentication failed: {}", e))?;
+        if !pwd.is_empty() {
+            let _: String = redis::cmd("AUTH")
+                .arg(pwd)
+                .query(&mut conn)
+                .map_err(|e| format!("Authentication failed: {}", e))?;
+        }
     }
 
     if db > 0 {

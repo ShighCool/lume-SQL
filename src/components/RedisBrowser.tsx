@@ -984,15 +984,15 @@ export function RedisBrowser({ connectionId }: RedisBrowserProps) {
 
   return (
     <div className="flex h-full">
-      <div className="w-[300px] border-r flex flex-col">
+      <div className="w-[300px] border-r flex flex-col sidebar-transition">
         {/* 数据库信息 */}
-        <div className="p-3 border-b bg-muted/30">
+        <div className="p-3 border-b bg-muted/30 transition-smooth">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-semibold">数据库</span>
+            <span className="text-xs font-semibold transition-smooth">数据库</span>
             <select
               value={dbIndex}
               onChange={(e) => handleSelectDb(parseInt(e.target.value))}
-              className="text-xs bg-background border rounded px-2 py-1"
+              className="text-xs bg-background border rounded px-2 py-1 transition-all duration-200"
             >
               {Array.from({ length: 16 }, (_, i) => (
                 <option key={i} value={i}>
@@ -1002,14 +1002,14 @@ export function RedisBrowser({ connectionId }: RedisBrowserProps) {
             </select>
           </div>
           {dbInfo && (
-            <div className="text-xs text-muted-foreground space-y-1">
+            <div className="text-xs text-muted-foreground space-y-1 transition-all duration-200">
               <div className="flex justify-between">
                 <span>Keys:</span>
-                <span className="font-mono">{dbInfo.key_count}</span>
+                <span className="font-mono transition-opacity duration-200">{dbInfo.key_count}</span>
               </div>
               <div className="flex justify-between">
                 <span>内存:</span>
-                <span className="font-mono">{(dbInfo.used_memory / 1024 / 1024).toFixed(2)} MB</span>
+                <span className="font-mono transition-opacity duration-200">{(dbInfo.used_memory / 1024 / 1024).toFixed(2)} MB</span>
               </div>
             </div>
           )}
@@ -1070,7 +1070,12 @@ export function RedisBrowser({ connectionId }: RedisBrowserProps) {
 
         <ScrollArea className="flex-1">
           <div className="p-2 space-y-1">
-            {filteredKeys.map((key) => (
+            {loading && filteredKeys.length === 0 ? (
+              <div className="flex items-center justify-center py-8">
+                <RefreshCw className="h-5 w-5 animate-spin text-primary" />
+              </div>
+            ) : (
+              filteredKeys.map((key) => (
               <ContextMenu key={key.key}>
                 <ContextMenuTrigger asChild>
                   <div
@@ -1130,7 +1135,7 @@ export function RedisBrowser({ connectionId }: RedisBrowserProps) {
                   </ContextMenuItem>
                 </ContextMenuContent>
               </ContextMenu>
-            ))}
+            )))}
           </div>
         </ScrollArea>
       </div>

@@ -246,23 +246,20 @@ export function Sidebar() {
         </Button>
       </div>
 
-      <ScrollArea className="flex-1 p-4">
+      <ScrollArea className="flex-1 p-4 relative">
         {connections.length === 0 ? (
           !collapsed && (
             <div className="text-center py-8">
-              <Database className="h-12 w-12 text-muted-foreground mx-auto mb-2" />
-              <p className="text-sm text-muted-foreground">暂无连接</p>
+              <Database className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+              <p className="text-sm text-muted-foreground mb-6">暂无连接</p>
               <Button
-                variant="outline"
-                size="sm"
-                className="mt-4"
                 onClick={() => {
                   setEditingConnectionId(null);
                   setShowConnectionForm(true);
                 }}
+                className="w-12 h-12 rounded-full bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 shadow-lg shadow-primary/20 hover:shadow-xl hover:shadow-primary/30 transition-all duration-200 hover:scale-110 active:scale-95 p-0"
               >
-                <Plus className="h-4 w-4 mr-2" />
-                添加连接
+                <Plus className="h-5 w-5" />
               </Button>
             </div>
           )
@@ -343,21 +340,33 @@ export function Sidebar() {
             )}
           </>
         )}
-      </ScrollArea>
-
-      {!collapsed && (
-        <div className="p-4 border-t">
+        
+        {/* 悬浮添加按钮 */}
+        {!collapsed && connections.length > 0 && (
           <Button
-            variant="outline"
-            size="sm"
-            className="w-full"
             onClick={() => {
               setEditingConnectionId(null);
               setShowConnectionForm(true);
             }}
+            className="absolute bottom-4 right-4 w-12 h-12 rounded-full bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 shadow-lg shadow-primary/20 hover:shadow-xl hover:shadow-primary/30 transition-all duration-200 hover:scale-110 active:scale-95 p-0 z-10"
+            title="添加连接"
           >
-            <Plus className="h-4 w-4 mr-2" />
-            添加连接
+            <Plus className="h-5 w-5" />
+          </Button>
+        )}
+      </ScrollArea>
+
+      {!collapsed && connections.length === 0 && (
+        <div className="p-4 border-t flex justify-center">
+          <Button
+            onClick={() => {
+              setEditingConnectionId(null);
+              setShowConnectionForm(true);
+            }}
+            className="w-12 h-12 rounded-full bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 shadow-lg shadow-primary/20 hover:shadow-xl hover:shadow-primary/30 transition-all duration-200 hover:scale-110 active:scale-95 p-0"
+            title="添加连接"
+          >
+            <Plus className="h-5 w-5" />
           </Button>
         </div>
       )}

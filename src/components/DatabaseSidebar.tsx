@@ -304,49 +304,61 @@ export function DatabaseSidebar({ connectionId }: DatabaseSidebarProps) {
   return (
     <div className="flex h-full">
       {/* 数据库列表 */}
-      <div className="w-40 border-r flex flex-col h-full">
+      <div className="w-40 border-r flex flex-col h-full sidebar-transition">
         <div className="p-2 border-b flex items-center justify-between shrink-0">
-          <h3 className="text-xs font-semibold">数据库</h3>
+          <h3 className="text-xs font-semibold transition-smooth">数据库</h3>
           <Button
             variant="ghost"
             size="icon-xs"
             onClick={loadDatabases}
             disabled={loading}
+            className="transition-smooth"
           >
             <RefreshCw className={cn("h-3 w-3", loading && "animate-spin")} />
           </Button>
         </div>
         <div className="flex-1 min-h-0 overflow-auto">
           <div className="p-1 space-y-0.5">
-            {filteredDatabases.map((db) => (
-              <button
-                key={db}
-                className={cn(
-                  "w-full text-left px-2 py-1 rounded text-xs flex items-center gap-1.5 transition-colors",
-                  selectedDatabase === db || activeDatabase === db
-                    ? "bg-primary/20 text-primary font-medium"
-                    : "hover:bg-muted"
-                )}
-                onClick={() => handleSelectDatabase(db)}
-                onDoubleClick={() => handleDoubleClickDatabase(db)}
-                title={db}
-              >
-                <Database className="h-3 w-3 shrink-0" />
-                <span className="truncate">{db}</span>
-              </button>
-            ))}
+            {loading && filteredDatabases.length === 0 ? (
+              <div className="flex items-center justify-center py-4">
+                <RefreshCw className="h-4 w-4 animate-spin text-primary" />
+              </div>
+            ) : (
+              filteredDatabases.map((db) => (
+                <button
+                  key={db}
+                  className={cn(
+                    "w-full text-left px-2 py-1 rounded text-xs flex items-center gap-1.5 transition-all duration-200 cursor-pointer",
+                    selectedDatabase === db || activeDatabase === db
+                      ? "bg-primary/20 text-primary font-medium"
+                      : "hover:bg-muted"
+                  )}
+                  onClick={() => handleSelectDatabase(db)}
+                  onDoubleClick={() => handleDoubleClickDatabase(db)}
+                  title={db}
+                >
+                  <Database className="h-3 w-3 shrink-0 transition-transform duration-200" />
+                  <span className="truncate transition-opacity duration-200">{db}</span>
+                </button>
+              ))
+            )}
           </div>
         </div>
       </div>
 
       {/* 表列表 */}
-      <div className="w-40 border-r flex flex-col h-full">
+      <div className="w-40 border-r flex flex-col h-full main-content-transition">
         <div className="p-2 border-b shrink-0">
-          <h3 className="text-xs font-semibold">表</h3>
+          <h3 className="text-xs font-semibold transition-smooth">表</h3>
         </div>
         <div className="flex-1 min-h-0 overflow-auto">
           <div className="p-1 space-y-0.5">
-            {tables.map((table) => (
+            {loading && tables.length === 0 ? (
+              <div className="flex items-center justify-center py-4">
+                <RefreshCw className="h-4 w-4 animate-spin text-primary" />
+              </div>
+            ) : (
+              tables.map((table) => (
               <ContextMenu key={table} onOpenChange={(open) => {
                 if (open) {
                   setContextMenuTable(table);
@@ -355,7 +367,7 @@ export function DatabaseSidebar({ connectionId }: DatabaseSidebarProps) {
                 <ContextMenuTrigger asChild>
                   <button
                     className={cn(
-                      "w-full text-left px-2 py-1.5 rounded text-xs flex items-center gap-1.5 transition-colors min-h-[28px]",
+                      "w-full text-left px-2 py-1.5 rounded text-xs flex items-center gap-1.5 transition-all duration-200 min-h-[28px] cursor-pointer",
                       selectedTable === table || activeTable === table
                         ? "bg-primary/20 text-primary font-medium"
                         : "hover:bg-muted"
@@ -364,8 +376,8 @@ export function DatabaseSidebar({ connectionId }: DatabaseSidebarProps) {
                     onDoubleClick={() => handleDoubleClickTable(table)}
                     title={table}
                   >
-                    <Table className="h-3 w-3 shrink-0" />
-                    <span className="truncate">{table}</span>
+                    <Table className="h-3 w-3 shrink-0 transition-transform duration-200" />
+                    <span className="truncate transition-opacity duration-200">{table}</span>
                   </button>
                 </ContextMenuTrigger>
                 <ContextMenuContent className="min-w-[180px]">
@@ -417,9 +429,9 @@ export function DatabaseSidebar({ connectionId }: DatabaseSidebarProps) {
 
       {/* 视图列表 */}
       {views.length > 0 && (
-        <div className="w-40 border-r flex flex-col h-full">
+        <div className="w-40 border-r flex flex-col h-full main-content-transition">
           <div className="p-2 border-b shrink-0">
-            <h3 className="text-xs font-semibold">视图</h3>
+            <h3 className="text-xs font-semibold transition-smooth">视图</h3>
           </div>
           <div className="flex-1 min-h-0 overflow-auto">
             <div className="p-1 space-y-0.5">
@@ -432,7 +444,7 @@ export function DatabaseSidebar({ connectionId }: DatabaseSidebarProps) {
                   <ContextMenuTrigger asChild>
                     <button
                       className={cn(
-                        "w-full text-left px-2 py-1.5 rounded text-xs flex items-center gap-1.5 transition-colors min-h-[28px]",
+                        "w-full text-left px-2 py-1.5 rounded text-xs flex items-center gap-1.5 transition-all duration-200 min-h-[28px] cursor-pointer",
                         selectedTable === view || activeTable === view
                           ? "bg-primary/20 text-primary font-medium"
                           : "hover:bg-muted"
@@ -441,8 +453,8 @@ export function DatabaseSidebar({ connectionId }: DatabaseSidebarProps) {
                       onDoubleClick={() => handleDoubleClickTable(view)}
                       title={view}
                     >
-                      <DatabaseIcon className="h-3 w-3 shrink-0" />
-                      <span className="truncate">{view}</span>
+                      <DatabaseIcon className="h-3 w-3 shrink-0 transition-transform duration-200" />
+                      <span className="truncate transition-opacity duration-200">{view}</span>
                     </button>
                   </ContextMenuTrigger>
                   <ContextMenuContent className="min-w-[180px]">
@@ -464,9 +476,9 @@ export function DatabaseSidebar({ connectionId }: DatabaseSidebarProps) {
 
       {/* 存储过程/函数列表 */}
       {routines.length > 0 && (
-        <div className="w-40 border-r flex flex-col h-full">
+        <div className="w-40 border-r flex flex-col h-full main-content-transition">
           <div className="p-2 border-b shrink-0">
-            <h3 className="text-xs font-semibold">存储过程/函数</h3>
+            <h3 className="text-xs font-semibold transition-smooth">存储过程/函数</h3>
           </div>
           <div className="flex-1 min-h-0 overflow-auto">
             <div className="p-1 space-y-0.5">
@@ -478,13 +490,13 @@ export function DatabaseSidebar({ connectionId }: DatabaseSidebarProps) {
                 }}>
                   <ContextMenuTrigger asChild>
                     <button
-                      className="w-full text-left px-2 py-1.5 rounded text-xs flex items-center gap-1.5 transition-colors min-h-[28px] hover:bg-muted"
+                      className="w-full text-left px-2 py-1.5 rounded text-xs flex items-center gap-1.5 transition-all duration-200 min-h-[28px] hover:bg-muted cursor-pointer"
                       onClick={() => handleSelectTable(routine.name)}
                       title={routine.name}
                     >
-                      <DatabaseIcon className="h-3 w-3 shrink-0" />
-                      <span className="truncate">{routine.name}</span>
-                      <span className="text-[10px] text-muted-foreground ml-auto">
+                      <DatabaseIcon className="h-3 w-3 shrink-0 transition-transform duration-200" />
+                      <span className="truncate transition-opacity duration-200">{routine.name}</span>
+                      <span className="text-[10px] text-muted-foreground ml-auto transition-opacity duration-200">
                         {routine.routine_type === 'PROCEDURE' ? 'P' : 'F'}
                       </span>
                     </button>

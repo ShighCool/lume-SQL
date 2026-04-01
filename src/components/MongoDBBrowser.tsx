@@ -272,15 +272,15 @@ export function MongoDBBrowser({ connectionId }: MongoDBBrowserProps) {
 
   return (
     <div className="flex h-full">
-      <div className="w-[260px] border-r flex flex-col">
-        <div className="p-3 border-b">
+      <div className="w-[260px] border-r flex flex-col sidebar-transition">
+        <div className="p-3 border-b transition-smooth">
           <div className="flex items-center justify-between">
-            <h3 className="text-sm font-semibold">集合</h3>
+            <h3 className="text-sm font-semibold transition-smooth">集合</h3>
             <div className="flex gap-1">
-              <Button size="sm" variant="ghost" onClick={handleAddCollection}>
+              <Button size="sm" variant="ghost" onClick={handleAddCollection} className="transition-all duration-200">
                 <Plus className="h-3.5 w-3.5" />
               </Button>
-              <Button size="sm" variant="ghost" onClick={handleRefresh} disabled={loading}>
+              <Button size="sm" variant="ghost" onClick={handleRefresh} disabled={loading} className="transition-all duration-200">
                 <RefreshCw className={cn("h-3.5 w-3.5", loading && "animate-spin")} />
               </Button>
             </div>
@@ -289,27 +289,32 @@ export function MongoDBBrowser({ connectionId }: MongoDBBrowserProps) {
 
         <ScrollArea className="flex-1">
           <div className="p-2 space-y-1">
-            {collections.map((collection) => (
+            {loading && collections.length === 0 ? (
+              <div className="flex items-center justify-center py-4">
+                <RefreshCw className="h-4 w-4 animate-spin text-primary" />
+              </div>
+            ) : (
+              collections.map((collection) => (
               <div
                 key={collection}
                 className={`
-                  p-2 rounded-md cursor-pointer transition-colors text-sm
+                  p-2 rounded-md cursor-pointer transition-all duration-200 text-sm
                   ${selectedCollection === collection ? 'bg-primary/10 text-primary' : 'hover:bg-muted'}
                 `}
                 onClick={() => handleSelectCollection(collection)}
               >
                 {collection}
               </div>
-            ))}
+            )))}
           </div>
         </ScrollArea>
       </div>
 
-      <div className="flex-1 flex flex-col">
+      <div className="flex-1 flex flex-col main-content-transition">
         {selectedCollection ? (
           <>
             {/* 工具栏 */}
-            <div className="px-4 py-3 border-b space-y-3">
+            <div className="px-4 py-3 border-b space-y-3 transition-smooth">
               <div className="flex items-center justify-between">
                 <h3 className="text-lg font-semibold">{selectedCollection}</h3>
                 <Button size="sm" variant="ghost" onClick={() => setShowAddDialog(true)}>
@@ -353,23 +358,24 @@ export function MongoDBBrowser({ connectionId }: MongoDBBrowserProps) {
                     </thead>
                     <tbody>
                       {documents.map((doc, idx) => (
-                        <tr key={idx} className="border-b hover:bg-muted/50">
-                          <td className="px-4 py-2">
-                            <span className="font-mono text-xs" title={String(doc._id)}>
+                        <tr key={idx} className="border-b hover:bg-muted/50 transition-colors duration-150">
+                          <td className="px-4 py-2 transition-colors duration-150">
+                            <span className="font-mono text-xs transition-opacity duration-200" title={String(doc._id)}>
                               {String(doc._id).substring(0, 12)}...
                             </span>
                           </td>
                           {fields.map(field => (
-                            <td key={field} className="px-4 py-2">
+                            <td key={field} className="px-4 py-2 transition-colors duration-150">
                               {renderCellValue(doc[field])}
                             </td>
                           ))}
-                          <td className="px-4 py-2">
+                          <td className="px-4 py-2 transition-colors duration-150">
                             <div className="flex gap-2">
                               <Button
                                 size="sm"
                                 variant="ghost"
                                 onClick={() => handleEditDocument(doc)}
+                                className="transition-all duration-200"
                               >
                                 编辑
                               </Button>
@@ -377,6 +383,7 @@ export function MongoDBBrowser({ connectionId }: MongoDBBrowserProps) {
                                 size="sm"
                                 variant="ghost"
                                 onClick={() => handleDeleteDocument(doc)}
+                                className="transition-all duration-200"
                               >
                                 <Trash2 className="h-3 w-3" />
                               </Button>

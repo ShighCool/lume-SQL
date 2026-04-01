@@ -143,19 +143,29 @@
   border-radius: 3px;
 }
 
-/* 滚动条滑块 - 默认隐藏 */
+/* 滚动条滑块 - 默认可见 */
 ::-webkit-scrollbar-thumb {
   background: #c0c4cc;
   border-radius: 3px;
   cursor: pointer;
-  opacity: 0;
+  opacity: 0.3;
   transition: opacity 0.3s, background-color 0.3s;
-  max-height: 40px !important;
+}
+
+/* 水平滚动条的最大高度限制 */
+::-webkit-scrollbar-thumb:horizontal {
+  max-height: 8px !important;
+}
+
+/* 垂直滚动条的最大宽度限制 */
+::-webkit-scrollbar-thumb:vertical {
+  max-width: 8px !important;
 }
 
 /* 滑块悬停 */
 ::-webkit-scrollbar-thumb:hover {
   background: #909399;
+  opacity: 1;
 }
 
 /* 滚动条角落 */
@@ -174,8 +184,102 @@
 }
 .light ::-webkit-scrollbar-thumb {
   background: #c0c4cc;
-  opacity: 0;
+  opacity: 0.3;
 }
 .light ::-webkit-scrollbar-thumb:hover {
   background: #909399;
+  opacity: 1;
+}
+
+/* 过渡动画 */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideInLeft {
+  from {
+    opacity: 0;
+    transform: translateX(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes slideInRight {
+  from {
+    opacity: 0;
+    transform: translateX(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes scaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.2s ease-out;
+}
+
+.animate-slide-in-left {
+  animation: slideInLeft 0.2s ease-out;
+}
+
+.animate-slide-in-right {
+  animation: slideInRight 0.2s ease-out;
+}
+
+.animate-scale-in {
+  animation: scaleIn 0.15s ease-out;
+}
+
+/* 平滑过渡 - 只对特定属性应用过渡 */
+.transition-smooth {
+  transition: opacity 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+              background-color 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+              color 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.transition-fast {
+  transition: opacity 0.15s cubic-bezier(0.4, 0, 0.2, 1),
+              background-color 0.15s cubic-bezier(0.4, 0, 0.2, 1),
+              color 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.transition-slow {
+  transition: opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+              background-color 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+              color 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* 侧边栏切换 */
+.sidebar-transition {
+  animation: slideInLeft 0.15s ease-out;
+}
+
+/* 主内容切换 */
+.main-content-transition {
+  animation: slideInRight 0.15s ease-out;
+}
+
+/* 表切换动画 */
+.table-transition {
+  animation: scaleIn 0.15s ease-out;
 }

@@ -43,7 +43,7 @@ function App() {
     if (!activeConnection) {
       return (
         <div className="flex items-center justify-center h-full">
-          <div className="text-center">
+          <div className="text-center animate-fade-in">
             <Database className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
             <h2 className="text-xl font-semibold mb-2">未选择连接</h2>
             <p className="text-muted-foreground mb-4">
@@ -60,7 +60,7 @@ function App() {
     if (activeConnection.status !== 'connected') {
       return (
         <div className="flex items-center justify-center h-full">
-          <div className="text-center">
+          <div className="text-center animate-fade-in">
             <Database className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
             <h2 className="text-xl font-semibold mb-2">未连接</h2>
             <p className="text-muted-foreground mb-4">
@@ -76,8 +76,8 @@ function App() {
         return (
           <div className="flex h-full">
             <DatabaseSidebar connectionId={activeConnectionId} />
-            <MySQLBrowser 
-              connectionId={activeConnectionId} 
+            <MySQLBrowser
+              connectionId={activeConnectionId}
               database={activeDatabase}
               table={activeTable}
             />
@@ -103,22 +103,28 @@ function App() {
       <div className="flex-1 flex flex-col overflow-hidden">
         <header className="h-14 border-b flex items-center justify-between px-4 bg-background">
           <div className="flex items-center gap-2">
-            <Database className="h-5 w-5 text-primary" />
+            <Database className="h-5 w-5 text-primary transition-smooth" />
             {activeConnection ? (
-              <span className="font-medium">{activeConnection.name}</span>
+              <span className="font-medium transition-smooth" key={`conn-${activeConnectionId}`}>
+                {activeConnection.name}
+              </span>
             ) : (
-              <span className="text-muted-foreground">未选择连接</span>
+              <span className="text-muted-foreground transition-smooth">未选择连接</span>
             )}
             {activeDatabase && (
               <>
-                <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                <span className="text-sm text-muted-foreground">{activeDatabase}</span>
+                <ChevronRight className="h-4 w-4 text-muted-foreground transition-smooth" />
+                <span className="text-sm text-muted-foreground transition-smooth" key={`db-${activeDatabase}`}>
+                  {activeDatabase}
+                </span>
               </>
             )}
             {activeTable && (
               <>
-                <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                <span className="text-sm text-muted-foreground">{activeTable}</span>
+                <ChevronRight className="h-4 w-4 text-muted-foreground transition-smooth" />
+                <span className="text-sm text-muted-foreground transition-smooth" key={`table-${activeTable}`}>
+                  {activeTable}
+                </span>
               </>
             )}
           </div>

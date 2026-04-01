@@ -197,7 +197,7 @@ export function ConnectionForm({ open, onOpenChange, editingConnectionId }: Conn
           redis: {
             host: redisForm.host,
             port: parseInt(redisForm.port),
-            password: redisForm.password || undefined,
+            password: redisForm.password.trim() || undefined,
             database: parseInt(redisForm.database),
           },
         };
