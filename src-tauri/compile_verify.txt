@@ -1,8 +1,0 @@
-﻿cargo :     Checking querydb v0.1.0 (F:\centos\queryDB\src-tauri)
-At line:1 char:35
-+ cd "F:\centos\queryDB\src-tauri"; cargo check 2>&1 | Out-File -FilePa ...
-+                                   ~~~~~~~~~~~~~~~~
-    + CategoryInfo          : NotSpecified: (    Checking qu...ryDB\src-tauri):String) [], RemoteException
-    + FullyQualifiedErrorId : NativeCommandError
- 
-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 26.58s
