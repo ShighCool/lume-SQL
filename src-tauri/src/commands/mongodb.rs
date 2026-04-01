@@ -623,7 +623,7 @@ fn build_connection_string(
     port: u16,
     username: &Option<String>,
     password: &Option<String>,
-    _database: &str,
+    database: &str,
 ) -> String {
     let auth_part = if let (Some(user), Some(pass)) = (username, password) {
         format!("{}:{}@", user, pass)
@@ -631,5 +631,5 @@ fn build_connection_string(
         String::new()
     };
 
-    format!("mongodb://{}{}/{}", auth_part, host, port)
+    format!("mongodb://{}{}/{}/{}", auth_part, host, port, database)
 }

@@ -2933,38 +2933,86 @@ pub async fn get_mysql_monitor_data(conn_id: String) -> Result<String, String> {
         .get_conn()
         .map_err(|e| format!("Failed to get database connection: {}", e))?;
 
+    // 查询连接数
     let status: Row = conn
         .query_first("SHOW GLOBAL STATUS LIKE 'Threads_connected'")
         .map_err(|e| format!("Failed to query status: {}", e))?
         .unwrap();
-
     let values = status.clone();
-    let threads_connected = values.get(1).and_then(|v| extract_string(v)).unwrap_or("0".to_string());
+    let threads_connected: f64 = values.get(1).and_then(|v| extract_string(v))
+        .unwrap_or("0".to_string())
+        .parse().unwrap_or(0.0);
 
+    // 查询总查询数
     let queries: Row = conn
         .query_first("SHOW GLOBAL STATUS LIKE 'Questions'")
         .map_err(|e| format!("Failed to query questions: {}", e))?
         .unwrap();
-
     let values2 = queries.clone();
-    let questions = values2.get(1).and_then(|v| extract_string(v)).unwrap_or("0".to_string());
+    let questions: f64 = values2.get(1).and_then(|v| extract_string(v))
+        .unwrap_or("0".to_string())
+        .parse().unwrap_or(0.0);
 
+    // 查询运行时间
     let uptime: Row = conn
         .query_first("SHOW GLOBAL STATUS LIKE 'Uptime'")
         .map_err(|e| format!("Failed to query uptime: {}", e))?
         .unwrap();
-
     let values3 = uptime.clone();
-    let uptime_str = values3.get(1).and_then(|v| extract_string(v)).unwrap_or("0".to_string());
+    let uptime_val: f64 = values3.get(1).and_then(|v| extract_string(v))
+        .unwrap_or("0".to_string())
+        .parse().unwrap_or(0.0);
+
+    // 查询慢查询数
+    let slow_queries: Row = conn
+        .query_first("SHOW GLOBAL STATUS LIKE 'Slow_queries'")
+        .map_err(|e| format!("Failed to query slow queries: {}", e))?
+        .unwrap();
+    let values4 = slow_queries.clone();
+    let slow_queries_count: f64 = values4.get(1).and_then(|v| extract_string(v))
+        .unwrap_or("0".to_string())
+        .parse().unwrap_or(0.0);
+
+    // 查询 InnoDB 缓冲池读请求
+    let read_requests: Row = conn
+        .query_first("SHOW GLOBAL STATUS LIKE 'Innodb_buffer_pool_read_requests'")
+        .map_err(|e| format!("Failed to query read requests: {}", e))?
+        .unwrap();
+    let values5 = read_requests.clone();
+    let read_requests_val: f64 = values5.get(1).and_then(|v| extract_string(v))
+        .unwrap_or("0".to_string())
+        .parse().unwrap_or(0.0);
+
+    // 查询 InnoDB 缓冲池读次数
+    let reads: Row = conn
+        .query_first("SHOW GLOBAL STATUS LIKE 'Innodb_buffer_pool_reads'")
+        .map_err(|e| format!("Failed to query reads: {}", e))?
+        .unwrap();
+    let values6 = reads.clone();
+    let reads_val: f64 = values6.get(1).and_then(|v| extract_string(v))
+        .unwrap_or("0".to_string())
+        .parse().unwrap_or(0.0);
+
+    // 计算 QPS 和命中率
+    let qps = if uptime_val > 0.0 { questions / uptime_val } else { 0.0 };
+    let innodb_buffer_pool_hit = if read_requests_val > 0.0 {
+        ((read_requests_val - reads_val) / read_requests_val) * 100.0
+    } else {
+        100.0
+    };
 
     let result = serde_json::json!({
-        "threads_connected": threads_connected,
-        "questions": questions,
-        "uptime": uptime_str,
-        "timestamp": chrono::Utc::now().to_rfc3339()
+        "timestamp": chrono::Utc::now().timestamp_millis(),
+        "qps": qps,
+        "connections": threads_connected,
+        "slow_queries": slow_queries_count,
+        "cpu_usage": 0.0,
+        "memory_usage": 0.0,
+        "uptime": uptime_val,
+        "innodb_buffer_pool_hit": innodb_buffer_pool_hit
     });
 
-    serde_json::to_string_pretty(&result)
+    serde_json::to_string(&result)
         .map_err(|e| format!("Failed to serialize data: {}", e))
 }
 
