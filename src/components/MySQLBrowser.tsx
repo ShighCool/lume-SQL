@@ -871,14 +871,6 @@ export function MySQLBrowser({ connectionId, database, table }: MySQLBrowserProp
             {/* 统计信息栏和分页 */}
             <div className="flex items-center justify-between px-4 py-2 border-b shrink-0">
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <span>共 {currentData.total} 条</span>
-                {queryExecutionTime !== null && (
-                  <>
-                    <ChevronRight className="h-4 w-4" />
-                    <span className="text-primary">查询耗时: {queryExecutionTime} ms</span>
-                  </>
-                )}
-                <ChevronRight className="h-4 w-4" />
                 <span>已选 {selectedRows.size} 条</span>
               </div>
               {!queryResult && tableData && (
