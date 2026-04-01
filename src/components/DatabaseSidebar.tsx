@@ -357,8 +357,7 @@ export function DatabaseSidebar({ connectionId }: DatabaseSidebarProps) {
               <div className="flex items-center justify-center py-4">
                 <RefreshCw className="h-4 w-4 animate-spin text-primary" />
               </div>
-            ) : (
-              tables.map((table) => (
+            ) : tables.map((table) => (
               <ContextMenu key={table} onOpenChange={(open) => {
                 if (open) {
                   setContextMenuTable(table);
