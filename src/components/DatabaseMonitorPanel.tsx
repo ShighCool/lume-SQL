@@ -63,13 +63,14 @@ export default function DatabaseMonitorPanel({ connectionId, databaseType }: Dat
 
   const loadMonitorData = async () => {
     if (!connectionId) return;
-    
+
     setLoading(true);
     try {
       const commandName = getCommandName();
-      const data: MonitorData = await invoke(commandName, { connId: connectionId });
+      const result: string = await invoke(commandName, { connId: connectionId });
+      const data: MonitorData = JSON.parse(result);
       setMonitorData(data);
-      
+
       // 添加到历史数据（保留最近60个点）
       setHistoryData(prev => {
         const newHistory = [...prev, data];
@@ -127,56 +128,56 @@ export default function DatabaseMonitorPanel({ connectionId, databaseType }: Dat
         return (
           <>
             <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-                  <Activity className="h-4 w-4" />
-                  QPS
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{mysqlData.qps.toFixed(2)}</div>
-                <div className="text-xs text-muted-foreground mt-1">每秒查询数</div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-                  <Database className="h-4 w-4" />
-                  连接数
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{mysqlData.connections}</div>
-                <div className="text-xs text-muted-foreground mt-1">当前连接</div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-                  <AlertTriangle className="h-4 w-4" />
-                  慢查询
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className={`text-2xl font-bold ${mysqlData.slow_queries > 0 ? 'text-orange-600' : ''}`}>
-                  {mysqlData.slow_queries}
+              <CardContent className="p-4 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <Activity className="h-5 w-5 text-muted-foreground" />
+                  <div>
+                    <div className="text-sm font-medium text-muted-foreground">QPS</div>
+                    <div className="text-xs text-muted-foreground">每秒查询数</div>
+                  </div>
                 </div>
-                <div className="text-xs text-muted-foreground mt-1">总慢查询数</div>
+                <div className="text-2xl font-bold">{(mysqlData.qps ?? 0).toFixed(2)}</div>
               </CardContent>
             </Card>
 
             <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-                  <Clock className="h-4 w-4" />
-                  运行时间
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{formatUptime(mysqlData.uptime)}</div>
-                <div className="text-xs text-muted-foreground mt-1">正常运行时间</div>
+              <CardContent className="p-4 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <Database className="h-5 w-5 text-muted-foreground" />
+                  <div>
+                    <div className="text-sm font-medium text-muted-foreground">连接数</div>
+                    <div className="text-xs text-muted-foreground">当前连接</div>
+                  </div>
+                </div>
+                <div className="text-2xl font-bold">{mysqlData.connections ?? 0}</div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="p-4 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <AlertTriangle className="h-5 w-5 text-muted-foreground" />
+                  <div>
+                    <div className="text-sm font-medium text-muted-foreground">慢查询</div>
+                    <div className="text-xs text-muted-foreground">总慢查询数</div>
+                  </div>
+                </div>
+                <div className={`text-2xl font-bold ${(mysqlData.slow_queries ?? 0) > 0 ? 'text-orange-600' : ''}`}>
+                  {mysqlData.slow_queries ?? 0}
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="p-4 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <Clock className="h-5 w-5 text-muted-foreground" />
+                  <div>
+                    <div className="text-sm font-medium text-muted-foreground">运行时间</div>
+                    <div className="text-xs text-muted-foreground">正常运行时间</div>
+                  </div>
+                </div>
+                <div className="text-2xl font-bold">{formatUptime(mysqlData.uptime ?? 0)}</div>
               </CardContent>
             </Card>
           </>
@@ -187,54 +188,54 @@ export default function DatabaseMonitorPanel({ connectionId, databaseType }: Dat
         return (
           <>
             <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-                  <Activity className="h-4 w-4" />
-                  QPS
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{redisData.qps.toFixed(2)}</div>
-                <div className="text-xs text-muted-foreground mt-1">每秒命令数</div>
+              <CardContent className="p-4 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <Activity className="h-5 w-5 text-muted-foreground" />
+                  <div>
+                    <div className="text-sm font-medium text-muted-foreground">QPS</div>
+                    <div className="text-xs text-muted-foreground">每秒命令数</div>
+                  </div>
+                </div>
+                <div className="text-2xl font-bold">{(redisData.qps ?? 0).toFixed(2)}</div>
               </CardContent>
             </Card>
 
             <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-                  <Database className="h-4 w-4" />
-                  连接数
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{redisData.connections}</div>
-                <div className="text-xs text-muted-foreground mt-1">当前连接</div>
+              <CardContent className="p-4 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <Database className="h-5 w-5 text-muted-foreground" />
+                  <div>
+                    <div className="text-sm font-medium text-muted-foreground">连接数</div>
+                    <div className="text-xs text-muted-foreground">当前连接</div>
+                  </div>
+                </div>
+                <div className="text-2xl font-bold">{redisData.connections ?? 0}</div>
               </CardContent>
             </Card>
 
             <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-                  <Layers className="h-4 w-4" />
-                  Key 数量
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{redisData.total_keys.toLocaleString()}</div>
-                <div className="text-xs text-muted-foreground mt-1">总 Key 数</div>
+              <CardContent className="p-4 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <Layers className="h-5 w-5 text-muted-foreground" />
+                  <div>
+                    <div className="text-sm font-medium text-muted-foreground">Key 数量</div>
+                    <div className="text-xs text-muted-foreground">总 Key 数</div>
+                  </div>
+                </div>
+                <div className="text-2xl font-bold">{(redisData.total_keys ?? 0).toLocaleString()}</div>
               </CardContent>
             </Card>
 
             <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-                  <Clock className="h-4 w-4" />
-                  运行时间
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{formatUptime(redisData.uptime)}</div>
-                <div className="text-xs text-muted-foreground mt-1">正常运行时间</div>
+              <CardContent className="p-4 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <Clock className="h-5 w-5 text-muted-foreground" />
+                  <div>
+                    <div className="text-sm font-medium text-muted-foreground">运行时间</div>
+                    <div className="text-xs text-muted-foreground">正常运行时间</div>
+                  </div>
+                </div>
+                <div className="text-2xl font-bold">{formatUptime(redisData.uptime ?? 0)}</div>
               </CardContent>
             </Card>
           </>
@@ -245,54 +246,54 @@ export default function DatabaseMonitorPanel({ connectionId, databaseType }: Dat
         return (
           <>
             <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-                  <Activity className="h-4 w-4" />
-                  QPS
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{mongoData.qps.toFixed(2)}</div>
-                <div className="text-xs text-muted-foreground mt-1">每秒操作数</div>
+              <CardContent className="p-4 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <Activity className="h-5 w-5 text-muted-foreground" />
+                  <div>
+                    <div className="text-sm font-medium text-muted-foreground">QPS</div>
+                    <div className="text-xs text-muted-foreground">每秒操作数</div>
+                  </div>
+                </div>
+                <div className="text-2xl font-bold">{(mongoData.qps ?? 0).toFixed(2)}</div>
               </CardContent>
             </Card>
 
             <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-                  <Database className="h-4 w-4" />
-                  连接数
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{mongoData.connections}</div>
-                <div className="text-xs text-muted-foreground mt-1">当前连接</div>
+              <CardContent className="p-4 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <Database className="h-5 w-5 text-muted-foreground" />
+                  <div>
+                    <div className="text-sm font-medium text-muted-foreground">连接数</div>
+                    <div className="text-xs text-muted-foreground">当前连接</div>
+                  </div>
+                </div>
+                <div className="text-2xl font-bold">{mongoData.connections ?? 0}</div>
               </CardContent>
             </Card>
 
             <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-                  <Layers className="h-4 w-4" />
-                  文档数
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{mongoData.documents.toLocaleString()}</div>
-                <div className="text-xs text-muted-foreground mt-1">总文档数</div>
+              <CardContent className="p-4 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <Layers className="h-5 w-5 text-muted-foreground" />
+                  <div>
+                    <div className="text-sm font-medium text-muted-foreground">文档数</div>
+                    <div className="text-xs text-muted-foreground">总文档数</div>
+                  </div>
+                </div>
+                <div className="text-2xl font-bold">{(mongoData.documents ?? 0).toLocaleString()}</div>
               </CardContent>
             </Card>
 
             <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-                  <Clock className="h-4 w-4" />
-                  运行时间
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{formatUptime(mongoData.uptime)}</div>
-                <div className="text-xs text-muted-foreground mt-1">正常运行时间</div>
+              <CardContent className="p-4 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <Clock className="h-5 w-5 text-muted-foreground" />
+                  <div>
+                    <div className="text-sm font-medium text-muted-foreground">运行时间</div>
+                    <div className="text-xs text-muted-foreground">正常运行时间</div>
+                  </div>
+                </div>
+                <div className="text-2xl font-bold">{formatUptime(mongoData.uptime ?? 0)}</div>
               </CardContent>
             </Card>
           </>
@@ -308,14 +309,14 @@ export default function DatabaseMonitorPanel({ connectionId, databaseType }: Dat
         const mysqlData = monitorData as MySQLMonitorData;
         return (
           <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium">InnoDB 缓冲池命中率</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold">{mysqlData.innodb_buffer_pool_hit.toFixed(2)}%</div>
-              <div className="text-xs text-muted-foreground mt-1">
-                {mysqlData.innodb_buffer_pool_hit >= 95 ? '✓ 优秀 (≥95%)' : '⚠ 需要优化'}
+            <CardContent className="p-4 flex items-center justify-between">
+              <div>
+                <div className="text-sm font-medium text-muted-foreground">InnoDB 缓冲池命中率</div>
+                <div className="text-xs text-muted-foreground">
+                  {(mysqlData.innodb_buffer_pool_hit ?? 0) >= 95 ? '✓ 优秀 (≥95%)' : '⚠ 需要优化'}
+                </div>
               </div>
+              <div className="text-3xl font-bold">{(mysqlData.innodb_buffer_pool_hit ?? 0).toFixed(2)}%</div>
             </CardContent>
           </Card>
         );
@@ -325,22 +326,22 @@ export default function DatabaseMonitorPanel({ connectionId, databaseType }: Dat
         return (
           <div className="grid grid-cols-2 gap-4">
             <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium">内存使用</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{formatMemory(redisData.memory_usage)}</div>
-                <div className="text-xs text-muted-foreground mt-1">峰值: {formatMemory(redisData.memory_peak)}</div>
+              <CardContent className="p-4 flex items-center justify-between">
+                <div>
+                  <div className="text-sm font-medium text-muted-foreground">内存使用</div>
+                  <div className="text-xs text-muted-foreground">峰值: {formatMemory(redisData.memory_peak ?? 0)}</div>
+                </div>
+                <div className="text-2xl font-bold">{formatMemory(redisData.memory_usage ?? 0)}</div>
               </CardContent>
             </Card>
 
             <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium">命中率</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{redisData.hit_rate.toFixed(2)}%</div>
-                <div className="text-xs text-muted-foreground mt-1">缓存命中率</div>
+              <CardContent className="p-4 flex items-center justify-between">
+                <div>
+                  <div className="text-sm font-medium text-muted-foreground">命中率</div>
+                  <div className="text-xs text-muted-foreground">缓存命中率</div>
+                </div>
+                <div className="text-2xl font-bold">{(redisData.hit_rate ?? 0).toFixed(2)}%</div>
               </CardContent>
             </Card>
           </div>
@@ -351,32 +352,32 @@ export default function DatabaseMonitorPanel({ connectionId, databaseType }: Dat
         return (
           <div className="grid grid-cols-3 gap-4">
             <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium">集合数</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{mongoData.collections}</div>
-                <div className="text-xs text-muted-foreground mt-1">总集合数</div>
+              <CardContent className="p-4 flex items-center justify-between">
+                <div>
+                  <div className="text-sm font-medium text-muted-foreground">集合数</div>
+                  <div className="text-xs text-muted-foreground">总集合数</div>
+                </div>
+                <div className="text-2xl font-bold">{mongoData.collections ?? 0}</div>
               </CardContent>
             </Card>
 
             <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium">数据大小</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{formatMemory(mongoData.data_size)}</div>
-                <div className="text-xs text-muted-foreground mt-1">占用空间</div>
+              <CardContent className="p-4 flex items-center justify-between">
+                <div>
+                  <div className="text-sm font-medium text-muted-foreground">数据大小</div>
+                  <div className="text-xs text-muted-foreground">占用空间</div>
+                </div>
+                <div className="text-2xl font-bold">{formatMemory(mongoData.data_size ?? 0)}</div>
               </CardContent>
             </Card>
 
             <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium">索引大小</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{formatMemory(mongoData.index_size)}</div>
-                <div className="text-xs text-muted-foreground mt-1">占用空间</div>
+              <CardContent className="p-4 flex items-center justify-between">
+                <div>
+                  <div className="text-sm font-medium text-muted-foreground">索引大小</div>
+                  <div className="text-xs text-muted-foreground">占用空间</div>
+                </div>
+                <div className="text-2xl font-bold">{formatMemory(mongoData.index_size ?? 0)}</div>
               </CardContent>
             </Card>
           </div>
@@ -387,18 +388,18 @@ export default function DatabaseMonitorPanel({ connectionId, databaseType }: Dat
   const getChartData = () => {
     return historyData.map(item => ({
       time: formatTimestamp(item.timestamp),
-      QPS: item.qps,
-      连接数: item.connections,
+      QPS: item.qps ?? 0,
+      连接数: item.connections ?? 0,
       ...(databaseType === 'mysql' && {
-        慢查询: (item as MySQLMonitorData).slow_queries,
-        命中率: (item as MySQLMonitorData).innodb_buffer_pool_hit,
+        慢查询: (item as MySQLMonitorData).slow_queries ?? 0,
+        命中率: (item as MySQLMonitorData).innodb_buffer_pool_hit ?? 0,
       }),
       ...(databaseType === 'redis' && {
-        Key数: (item as RedisMonitorData).total_keys,
-        命中率: (item as RedisMonitorData).hit_rate,
+        Key数: (item as RedisMonitorData).total_keys ?? 0,
+        命中率: (item as RedisMonitorData).hit_rate ?? 0,
       }),
       ...(databaseType === 'mongodb' && {
-        文档数: (item as MongoDBMonitorData).documents,
+        文档数: (item as MongoDBMonitorData).documents ?? 0,
       }),
     }));
   };
@@ -447,8 +448,8 @@ export default function DatabaseMonitorPanel({ connectionId, databaseType }: Dat
               </CardHeader>
               <CardContent>
                 {chartData.length > 0 ? (
-                  <div className="h-[400px]">
-                    <ResponsiveContainer width="100%" height="100%">
+                  <div style={{ width: '100%', height: '400px' }}>
+                    <ResponsiveContainer width="100%" height={400} aspect={undefined}>
                       <LineChart data={chartData}>
                         <CartesianGrid strokeDasharray="3 3" />
                         <XAxis dataKey="time" />

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useConnectionStore } from '../stores/connectionStore';
-import type { DatabaseType, ConnectionConfig, MySQLAdvancedOptions } from '../types/database';
+import type { DatabaseType, ConnectionConfig, MySQLAdvancedOptions, RedisAdvancedOptions } from '../types/database';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from './ui/dialog';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from './ui/tabs';
 import { Input } from './ui/input';
@@ -28,6 +28,7 @@ interface RedisFormData {
   name: string;
   host: string;
   port: string;
+  username: string;
   password: string;
   database: string;
 }
@@ -59,6 +60,7 @@ export function ConnectionForm({ open, onOpenChange, editingConnectionId }: Conn
     name: '',
     host: 'localhost',
     port: '6379',
+    username: '',
     password: '',
     database: '0',
   });
@@ -77,6 +79,11 @@ export function ConnectionForm({ open, onOpenChange, editingConnectionId }: Conn
     allowedDatabases: '',
     defaultQueryLimit: 100,
     defaultSortField: '',
+  });
+
+  const [redisAdvancedOptions, setRedisAdvancedOptions] = useState<RedisAdvancedOptions>({
+    databaseCount: 16,
+    keyPageSize: 100,
   });
 
   // 初始化编辑模式
@@ -109,8 +116,13 @@ export function ConnectionForm({ open, onOpenChange, editingConnectionId }: Conn
               name: connection.name,
               host: redisConfig.host,
               port: redisConfig.port.toString(),
+              username: redisConfig.username || '',
               password: redisConfig.password || '',
               database: redisConfig.database?.toString() || '0',
+            });
+            setRedisAdvancedOptions(redisConfig.advancedOptions || {
+              databaseCount: 16,
+              keyPageSize: 100,
             });
             break;
           case 'mongodb':
@@ -143,6 +155,7 @@ export function ConnectionForm({ open, onOpenChange, editingConnectionId }: Conn
       name: '',
       host: 'localhost',
       port: '6379',
+      username: '',
       password: '',
       database: '0',
     });
@@ -197,8 +210,10 @@ export function ConnectionForm({ open, onOpenChange, editingConnectionId }: Conn
           redis: {
             host: redisForm.host,
             port: parseInt(redisForm.port),
+            username: redisForm.username.trim() || undefined,
             password: redisForm.password.trim() || undefined,
             database: parseInt(redisForm.database),
+            advancedOptions: redisAdvancedOptions,
           },
         };
         break;
@@ -281,8 +296,10 @@ export function ConnectionForm({ open, onOpenChange, editingConnectionId }: Conn
           redis: {
             host: redisForm.host,
             port: parseInt(redisForm.port),
-            password: redisForm.password || undefined,
+            username: redisForm.username.trim() || undefined,
+            password: redisForm.password.trim() || undefined,
             database: parseInt(redisForm.database),
+            advancedOptions: redisAdvancedOptions,
           },
         };
         break;
@@ -465,21 +482,63 @@ export function ConnectionForm({ open, onOpenChange, editingConnectionId }: Conn
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="redis-password">密码（可选）</Label>
+                <Label htmlFor="redis-username">用户名（可选，与密码一起使用）</Label>
+                <Input
+                  id="redis-username"
+                  value={redisForm.username}
+                  onChange={(e) => setRedisForm({ ...redisForm, username: e.target.value })}
+                  placeholder="留空则不需要用户名"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="redis-password">密码（可选，与用户名一起使用）</Label>
                 <PasswordInput
                   id="redis-password"
                   value={redisForm.password}
                   onChange={(e) => setRedisForm({ ...redisForm, password: e.target.value })}
+                  placeholder="留空则不需要密码"
                 />
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="redis-database">数据库索引</Label>
-                <Input
-                  id="redis-database"
-                  type="number"
-                  value={redisForm.database}
-                  onChange={(e) => setRedisForm({ ...redisForm, database: e.target.value })}
-                />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="redis-database">数据库索引</Label>
+              <Input
+                id="redis-database"
+                type="number"
+                value={redisForm.database}
+                onChange={(e) => setRedisForm({ ...redisForm, database: e.target.value })}
+              />
+            </div>
+
+            <div className="border-t pt-4">
+              <Label className="text-sm font-semibold mb-3 block">高级选项</Label>
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <Label htmlFor="redis-db-count" className="text-sm">数据库数量</Label>
+                    <Input
+                      id="redis-db-count"
+                      type="number"
+                      value={redisAdvancedOptions.databaseCount}
+                      onChange={(e) => setRedisAdvancedOptions({ ...redisAdvancedOptions, databaseCount: parseInt(e.target.value) || 16 })}
+                      placeholder="16"
+                      min="1"
+                      max="256"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="redis-key-page-size" className="text-sm">每页 key 数量</Label>
+                    <Input
+                      id="redis-key-page-size"
+                      type="number"
+                      value={redisAdvancedOptions.keyPageSize}
+                      onChange={(e) => setRedisAdvancedOptions({ ...redisAdvancedOptions, keyPageSize: parseInt(e.target.value) || 100 })}
+                      placeholder="100"
+                      min="10"
+                      max="10000"
+                    />
+                  </div>
+                </div>
               </div>
             </div>
           </TabsContent>

@@ -134,6 +134,7 @@ export const useConnectionStore = create<ConnectionState>()(
                 connId: id,
                 host: redisConfig.host,
                 port: redisConfig.port,
+                username: redisConfig.username,
                 password: redisConfig.password,
                 db: redisConfig.database,
               });
@@ -219,6 +220,7 @@ export const useConnectionStore = create<ConnectionState>()(
               result = await invoke('test_redis_connection', {
                 host: redisConfig.host,
                 port: redisConfig.port,
+                username: redisConfig.username,
                 password: redisConfig.password,
                 db: redisConfig.database,
               });

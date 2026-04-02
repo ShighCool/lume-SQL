@@ -13,19 +13,38 @@ lazy_static! {
 pub async fn test_redis_connection(
     host: String,
     port: u16,
+    username: Option<String>,
     password: Option<String>,
     db: i64,
 ) -> Result<bool, String> {
-    let client = create_client(&host, port, &password, db)?;
-    
-    let mut conn = client.get_connection()
-        .map_err(|e| format!("Connection test failed: {}", e))?;
+    use tokio::time::{timeout, Duration};
 
-    let _: String = redis::cmd("PING")
-        .query(&mut conn)
-        .map_err(|e| format!("PING failed: {}", e))?;
+    let client = create_client(&host, port, &username, &password, db)?;
 
-    Ok(true)
+    // 使用 tokio timeout 包装连接过程，设置5秒超时
+    let connection_result = timeout(Duration::from_secs(5), async {
+        let mut conn = client.get_connection()
+            .map_err(|e| format!("Connection test failed: {}", e))?;
+
+        // 如果指定了数据库索引，先切换数据库
+        if db > 0 {
+            let _: () = redis::cmd("SELECT")
+                .arg(db)
+                .query(&mut conn)
+                .map_err(|e| format!("SELECT database failed: {}", e))?;
+        }
+
+        let _: String = redis::cmd("PING")
+            .query(&mut conn)
+            .map_err(|e| format!("PING failed: {}", e))?;
+
+        Ok::<bool, String>(true)
+    }).await;
+
+    match connection_result {
+        Ok(result) => result,
+        Err(_) => Err("Connection test failed: 连接超时，请检查Redis服务器是否运行并确保网络畅通".to_string()),
+    }
 }
 
 #[tauri::command]
@@ -33,25 +52,35 @@ pub async fn connect_redis(
     conn_id: String,
     host: String,
     port: u16,
+    username: Option<String>,
     password: Option<String>,
     db: i64,
 ) -> Result<bool, String> {
-    let client = create_client(&host, port, &password, db)?;
-    
-    let mut conn = client.get_connection()
-        .map_err(|e| format!("Connection failed: {}", e))?;
+    use tokio::time::{timeout, Duration};
 
-    if db > 0 {
-        let _: () = redis::cmd("SELECT")
-            .arg(db)
-            .query(&mut conn)
-            .map_err(|e| format!("Select database failed: {}", e))?;
+    let client = create_client(&host, port, &username, &password, db)?;
+
+    // 使用 tokio timeout 包装连接过程，设置5秒超时
+    let connection_result = timeout(Duration::from_secs(5), async {
+        let mut conn = client.get_connection()
+            .map_err(|e| format!("Connection failed: {}", e))?;
+
+        if db > 0 {
+            let _: () = redis::cmd("SELECT")
+                .arg(db)
+                .query(&mut conn)
+                .map_err(|e| format!("Select database failed: {}", e))?;
+        }
+
+        let mut connections = CONNECTIONS.lock().await;
+        connections.insert(conn_id, conn);
+        Ok::<bool, String>(true)
+    }).await;
+
+    match connection_result {
+        Ok(result) => result,
+        Err(_) => Err("Connection failed: 连接超时，请检查Redis服务器是否运行并确保网络畅通".to_string()),
     }
-
-    let mut connections = CONNECTIONS.lock().await;
-
-    connections.insert(conn_id, conn);
-    Ok(true)
 }
 
 #[tauri::command]
@@ -65,19 +94,52 @@ pub async fn disconnect_redis(conn_id: String) -> Result<bool, String> {
 }
 
 #[tauri::command]
-pub async fn get_redis_keys(conn_id: String, pattern: String) -> Result<String, String> {
+pub async fn get_redis_keys(
+    conn_id: String,
+    pattern: String,
+    limit: Option<usize>,
+    cursor: Option<usize>,
+) -> Result<String, String> {
     let mut connections = CONNECTIONS.lock().await;
 
     let conn = connections
         .get_mut(&conn_id)
         .ok_or_else(|| format!("Connection ID '{}' does not exist", conn_id))?;
 
-    let keys: Vec<String> = redis::cmd("KEYS")
-        .arg(&pattern)
-        .query(conn)
-        .map_err(|e| format!("Failed to get keys: {}", e))?;
+    eprintln!("Getting Redis keys with pattern: {}, limit: {:?}, cursor: {:?}", pattern, limit, cursor);
 
-    serde_json::to_string_pretty(&keys)
+    let limit = limit.unwrap_or(100);
+    let cursor = cursor.unwrap_or(0);
+
+    // 使用 SCAN 命令（渐进式，不会阻塞 Redis）
+    let result: (usize, Vec<String>) = redis::cmd("SCAN")
+        .arg(cursor)
+        .arg("MATCH")
+        .arg(&pattern)
+        .arg("COUNT")
+        .arg(limit * 2) // 获取更多以确保有足够的结果
+        .query(conn)
+        .map_err(|e| {
+            eprintln!("Failed to scan keys: {}", e);
+            format!("Failed to scan keys: {}", e)
+        })?;
+
+    let (next_cursor, mut keys) = result;
+
+    // 限制返回的数量
+    if keys.len() > limit {
+        keys.truncate(limit);
+    }
+
+    eprintln!("Found {} keys, next cursor: {}", keys.len(), next_cursor);
+
+    let response = json!({
+        "keys": keys,
+        "cursor": next_cursor,
+        "has_more": next_cursor != 0
+    });
+
+    serde_json::to_string(&response)
         .map_err(|e| format!("Serialization failed: {}", e))
 }
 
@@ -89,38 +151,68 @@ pub async fn get_redis_value(conn_id: String, key: String) -> Result<String, Str
         .get_mut(&conn_id)
         .ok_or_else(|| format!("Connection ID '{}' does not exist", conn_id))?;
 
+    eprintln!("Getting value for key: {}", key);
+
     let key_type: String = redis::cmd("TYPE")
         .arg(&key)
         .query(conn)
-        .map_err(|e| format!("Failed to get type: {}", e))?;
+        .map_err(|e| {
+            format!("Failed to get type: {}", e)
+        })?;
+
+
 
     let result = match key_type.as_str() {
         "string" => {
             let value: String = conn.get(&key)
-                .map_err(|e| format!("Failed to get value: {}", e))?;
+                .map_err(|e| {
+                    eprintln!("Failed to get string value for key {}: {}", key, e);
+                    format!("Failed to get value: {}", e)
+                })?;
             json!({ "type": "string", "value": value })
         }
         "hash" => {
             let value: HashMap<String, String> = conn.hgetall(&key)
-                .map_err(|e| format!("Failed to get hash: {}", e))?;
+                .map_err(|e| {
+                    eprintln!("Failed to get hash value for key {}: {}", key, e);
+                    format!("Failed to get hash: {}", e)
+                })?;
             json!({ "type": "hash", "value": value })
         }
         "list" => {
+            eprintln!("Getting list value for key: {}", key);
             let value: Vec<String> = conn.lrange(&key, 0, -1)
-                .map_err(|e| format!("Failed to get list: {}", e))?;
+                .map_err(|e| {
+                    eprintln!("Failed to get list value for key {}: {}", key, e);
+                    format!("Failed to get list: {}", e)
+                })?;
+            eprintln!("List elements count: {}", value.len());
             json!({ "type": "list", "value": value })
         }
         "set" => {
+            eprintln!("Getting set value for key: {}", key);
             let value: Vec<String> = conn.smembers(&key)
-                .map_err(|e| format!("Failed to get set: {}", e))?;
+                .map_err(|e| {
+                    eprintln!("Failed to get set value for key {}: {}", key, e);
+                    format!("Failed to get set: {}", e)
+                })?;
+            eprintln!("Set members count: {}", value.len());
             json!({ "type": "set", "value": value })
         }
         "zset" => {
+            eprintln!("Getting zset value for key: {}", key);
             let value: Vec<(String, i64)> = conn.zrange_withscores(&key, 0, -1)
-                .map_err(|e| format!("Failed to get zset: {}", e))?;
+                .map_err(|e| {
+                    eprintln!("Failed to get zset value for key {}: {}", key, e);
+                    format!("Failed to get zset: {}", e)
+                })?;
+            eprintln!("ZSet members count: {}", value.len());
             json!({ "type": "zset", "value": value })
         }
-        _ => json!({ "type": key_type, "value": null })
+        _ => {
+            eprintln!("Unknown key type: {}", key_type);
+            json!({ "type": key_type, "value": null })
+        }
     };
 
     serde_json::to_string_pretty(&result)
@@ -135,10 +227,16 @@ pub async fn get_redis_key_type(conn_id: String, key: String) -> Result<String, 
         .get_mut(&conn_id)
         .ok_or_else(|| format!("Connection ID '{}' does not exist", conn_id))?;
 
+    eprintln!("Getting type for key: {}", key);
+
     let key_type: String = redis::cmd("TYPE")
         .arg(&key)
         .query(conn)
-        .map_err(|e| format!("Failed to get type: {}", e))?;
+        .map_err(|e| {
+            eprintln!("Failed to get type for key {}: {}", key, e);
+            format!("Failed to get type: {}", e)
+        })?;
+
 
     Ok(key_type)
 }
@@ -668,13 +766,89 @@ pub async fn get_redis_slowlog(conn_id: String) -> Result<String, String> {
         .get_mut(&conn_id)
         .ok_or_else(|| format!("Connection ID '{}' does not exist", conn_id))?;
 
-    let logs: String = redis::cmd("SLOWLOG")
+    let logs: Vec<redis::Value> = redis::cmd("SLOWLOG")
         .arg("GET")
         .arg(10)
         .query(conn)
         .map_err(|e| format!("Failed to get slowlog: {}", e))?;
 
-    Ok(logs)
+    let formatted_logs: Vec<Value> = logs.iter().map(|log| {
+        if let redis::Value::Array(items) = log {
+            let id = items.get(0).and_then(|v| {
+                if let redis::Value::Int(n) = v {
+                    Some(n)
+                } else {
+                    None
+                }
+            }).unwrap_or(&0);
+            
+            let timestamp = items.get(1).and_then(|v| {
+                if let redis::Value::Int(n) = v {
+                    Some(n)
+                } else {
+                    None
+                }
+            }).unwrap_or(&0);
+            
+            let duration = items.get(2).and_then(|v| {
+                if let redis::Value::Int(n) = v {
+                    Some(n)
+                } else {
+                    None
+                }
+            }).unwrap_or(&0);
+            
+            let command = items.get(3).and_then(|v| {
+                if let redis::Value::Array(cmd_items) = v {
+                    Some(cmd_items.iter().filter_map(|item| {
+                        if let redis::Value::BulkString(bytes) = item {
+                            std::str::from_utf8(bytes).ok().map(|s| s.trim_matches('"').to_string())
+                        } else if let redis::Value::SimpleString(s) = item {
+                            Some(s.clone())
+                        } else {
+                            None
+                        }
+                    }).collect::<Vec<String>>())
+                } else {
+                    None
+                }
+            }).unwrap_or_default();
+            
+            let client_ip = items.get(4).and_then(|v| {
+                if let redis::Value::BulkString(bytes) = v {
+                    std::str::from_utf8(bytes).ok().map(|s| s.trim_matches('"').to_string())
+                } else if let redis::Value::SimpleString(s) = v {
+                    Some(s.clone())
+                } else {
+                    None
+                }
+            }).unwrap_or_default();
+            
+            let client_name = items.get(5).and_then(|v| {
+                if let redis::Value::BulkString(bytes) = v {
+                    std::str::from_utf8(bytes).ok().map(|s| s.trim_matches('"').to_string())
+                } else if let redis::Value::SimpleString(s) = v {
+                    Some(s.clone())
+                } else {
+                    None
+                }
+            }).unwrap_or_default();
+            
+            json!({
+                "id": id,
+                "timestamp": timestamp,
+                "duration": duration,
+                "command": command,
+                "client_ip": client_ip,
+                "client_name": client_name
+            })
+        } else {
+            json!(null)
+        }
+    }).collect();
+
+    serde_json::to_string(&formatted_logs)
+        .map_err(|e| format!("Failed to serialize slowlog: {}", e))
 }
 
 #[tauri::command]
@@ -1295,26 +1469,32 @@ pub async fn get_redis_monitor_data(conn_id: String) -> Result<String, String> {
 fn create_client(
     host: &str,
     port: u16,
+    username: &Option<String>,
     password: &Option<String>,
-    db: i64,
+    _db: i64,
 ) -> Result<Client, String> {
     // 构建 Redis URL
-    let mut url = format!("redis://{}:{}", host, port);
-    
-    // 如果有密码，添加到 URL 中
-    if let Some(pwd) = password {
-        if !pwd.is_empty() {
-            // URL 编码密码中的特殊字符
-            let encoded_pwd = pwd.replace(':', "%3A").replace("@", "%40").replace("/", "%2F");
-            url = format!("redis://:{}@{}:{}", encoded_pwd, host, port);
+    let url = if let Some(user) = username {
+        if !user.is_empty() {
+            // 有用户名：redis://username:password@host:port
+            if let Some(pwd) = password {
+                if !pwd.is_empty() {
+                    format!("redis://{}:{}@{}:{}", user, pwd, host, port)
+                } else {
+                    format!("redis://{}@{}:{}", user, host, port)
+                }
+            } else {
+                format!("redis://{}@{}:{}", user, host, port)
+            }
+        } else {
+            // 用户名为空：redis://host:port
+            format!("redis://{}:{}", host, port)
         }
-    }
-    
-    // 如果指定了数据库索引，添加到 URL 中
-    if db > 0 {
-        url = format!("{}/{}", url, db);
-    }
-    
+    } else {
+        // 无用户名：redis://host:port
+        format!("redis://{}:{}", host, port)
+    };
+
     let client = Client::open(url)
         .map_err(|e| format!("Failed to create client: {}", e))?;
 
@@ -1418,5 +1598,222 @@ fn set_redis_value_internal(
     }
 
     Ok(())
+}
+
+#[tauri::command]
+pub async fn get_redis_keys_by_type(
+    conn_id: String,
+    pattern: String,
+    key_type: Option<String>,
+    limit: Option<usize>,
+    cursor: Option<usize>,
+) -> Result<String, String> {
+    eprintln!("=== get_redis_keys_by_type called ===");
+    eprintln!("conn_id: {}", conn_id);
+    eprintln!("pattern: {}", pattern);
+    eprintln!("key_type: {:?}", key_type);
+    eprintln!("limit: {:?}", limit);
+    eprintln!("cursor: {:?}", cursor);
+
+    let mut connections = CONNECTIONS.lock().await;
+
+    let conn = connections
+        .get_mut(&conn_id)
+        .ok_or_else(|| {
+            eprintln!("Connection ID '{}' does not exist", conn_id);
+            format!("Connection ID '{}' does not exist", conn_id)
+        })?;
+
+    eprintln!("Got connection successfully");
+
+    let limit = limit.unwrap_or(100);
+    let cursor = cursor.unwrap_or(0);
+
+    // 使用 SCAN 命令获取 keys
+    eprintln!("Executing SCAN command...");
+    let result: (usize, Vec<String>) = redis::cmd("SCAN")
+        .arg(cursor)
+        .arg("MATCH")
+        .arg(&pattern)
+        .arg("COUNT")
+        .arg(limit * 2) // 获取更多以确保有足够的结果
+        .query(conn)
+        .map_err(|e| {
+            eprintln!("Failed to scan keys: {}", e);
+            format!("Failed to scan keys: {}", e)
+        })?;
+
+    let (next_cursor, keys) = result;
+
+    eprintln!("Found {} keys, next cursor: {}", keys.len(), next_cursor);
+
+    // 如果指定了类型过滤，则使用 Pipeline 批量获取每个 key 的类型并进行过滤
+    let filtered_keys = if let Some(ref filter_type) = key_type {
+        if !filter_type.is_empty() {
+            eprintln!("Filtering by type: {}", filter_type);
+            
+            // 使用 Pipeline 批量获取类型（性能优化：减少网络往返）
+            let mut pipe = redis::pipe();
+            for key in &keys {
+                pipe.cmd("TYPE").arg(key);
+            }
+            
+            // 一次性执行所有 TYPE 命令
+            let results: Vec<redis::Value> = pipe
+                .query(conn)
+                .map_err(|e| {
+                    eprintln!("Failed to execute pipeline TYPE commands: {}", e);
+                    format!("Failed to execute pipeline TYPE commands: {}", e)
+                })?;
+
+            // 解析结果
+            let mut matching_keys = Vec::new();
+            let mut type_keys: Vec<(String, String)> = Vec::new();
+            
+            for (index, (key, result)) in keys.iter().zip(results.iter()).enumerate() {
+                match result {
+                    redis::Value::BulkString(bytes) => {
+                        if let Ok(ktype_str) = std::str::from_utf8(bytes) {
+                            let ktype = ktype_str.to_string();
+                            type_keys.push((key.clone(), ktype.clone()));
+                            
+                            // 立即过滤匹配的类型
+                            if ktype == *filter_type {
+                                matching_keys.push(key.clone());
+                            }
+                        }
+                    }
+                    redis::Value::SimpleString(ktype_str) => {
+                        type_keys.push((key.clone(), ktype_str.clone()));
+                        
+                        if ktype_str.as_str() == filter_type {
+                            matching_keys.push(key.clone());
+                        }
+                    }
+                    _ => {
+                        eprintln!("Key {}: {} - Unexpected result type: {:?}", index, key, result);
+                    }
+                }
+            }
+
+            eprintln!("Got types for {} keys, found {} matching", type_keys.len(), matching_keys.len());
+            matching_keys
+        } else {
+            eprintln!("Filter type is empty, returning all keys");
+            keys
+        }
+    } else {
+        eprintln!("No filter type specified, returning all keys");
+        keys
+    };
+
+    // 限制返回的数量
+    let filtered_count = filtered_keys.len();
+    let result_keys = if filtered_count > limit {
+        filtered_keys[..limit].to_vec()
+    } else {
+        filtered_keys
+    };
+
+
+    let response = json!({
+        "keys": result_keys,
+        "cursor": next_cursor,
+        "has_more": next_cursor != 0 || filtered_count > limit
+    });
+
+
+    serde_json::to_string(&response)
+        .map_err(|e| {
+            eprintln!("Serialization failed: {}", e);
+            format!("Serialization failed: {}", e)
+        })
+}
+
+#[tauri::command]
+pub async fn get_hash_fields_paginated(
+    conn_id: String,
+    key: String,
+    offset: usize,
+    limit: usize,
+    search: Option<String>,
+) -> Result<String, String> {
+    let mut connections = CONNECTIONS.lock().await;
+    let conn = connections.get_mut(&conn_id)
+        .ok_or_else(|| format!("Connection ID '{}' does not exist", conn_id))?;
+
+    let all_fields: Vec<String> = conn.hkeys(&key)
+        .map_err(|e| format!("Failed to get hash fields: {}", e))?;
+
+    let filtered_fields: Vec<String> = if let Some(search_term) = search {
+        if search_term.is_empty() {
+            all_fields
+        } else {
+            all_fields.into_iter()
+                .filter(|f| f.to_lowercase().contains(&search_term.to_lowercase()))
+                .collect()
+        }
+    } else {
+        all_fields
+    };
+
+    let total = filtered_fields.len();
+    let fields_page: Vec<String> = filtered_fields.into_iter()
+        .skip(offset)
+        .take(limit)
+        .collect();
+
+    let mut result: Vec<(String, String)> = Vec::new();
+    for field in &fields_page {
+        if let Ok(value) = conn.hget(&key, field) {
+            result.push((field.clone(), value));
+        }
+    }
+
+    serde_json::to_string(&json!({
+        "data": result,
+        "total": total,
+        "has_more": offset + limit < total
+    })).map_err(|e| format!("Serialization failed: {}", e))
+}
+
+#[tauri::command]
+pub async fn get_zset_members_paginated(
+    conn_id: String,
+    key: String,
+    offset: usize,
+    limit: usize,
+    search: Option<String>,
+) -> Result<String, String> {
+    let mut connections = CONNECTIONS.lock().await;
+    let conn = connections.get_mut(&conn_id)
+        .ok_or_else(|| format!("Connection ID '{}' does not exist", conn_id))?;
+
+    let all_members: Vec<(String, i64)> = conn.zrange_withscores(&key, 0, -1)
+        .map_err(|e| format!("Failed to get zset members: {}", e))?;
+
+    let filtered_members: Vec<(String, i64)> = if let Some(search_term) = search {
+        if search_term.is_empty() {
+            all_members
+        } else {
+            all_members.into_iter()
+                .filter(|(m, _)| m.to_lowercase().contains(&search_term.to_lowercase()))
+                .collect()
+        }
+    } else {
+        all_members
+    };
+
+    let total = filtered_members.len();
+    let members_page: Vec<(String, i64)> = filtered_members.into_iter()
+        .skip(offset)
+        .take(limit)
+        .collect();
+
+    serde_json::to_string(&json!({
+        "data": members_page,
+        "total": total,
+        "has_more": offset + limit < total
+    })).map_err(|e| format!("Serialization failed: {}", e))
 }
 

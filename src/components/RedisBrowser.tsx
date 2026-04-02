@@ -1,10 +1,11 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { Search, Plus, Trash2, RefreshCw, Clock, Terminal, Download, Edit2 } from 'lucide-react';
+import { Search, Plus, Trash2, RefreshCw, Clock, Terminal, Download, Edit2, Activity } from 'lucide-react';
 import { Button } from './ui/button';
 import { Checkbox } from './ui/checkbox';
 import { Input } from './ui/input';
 import { ScrollArea } from './ui/scroll-area';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/tooltip';
 import {
   Table,
   TableBody,
@@ -21,6 +22,8 @@ import {
   ContextMenuTrigger,
 } from './ui/context-menu';
 import { cn } from '../lib/utils';
+import { useConnectionStore } from '../stores/connectionStore';
+import DatabaseMonitorPanel from './DatabaseMonitorPanel';
 
 type RedisKeyType = 'string' | 'hash' | 'list' | 'set' | 'zset';
 
@@ -36,19 +39,36 @@ interface RedisBrowserProps {
 }
 
 export function RedisBrowser({ connectionId }: RedisBrowserProps) {
+  const { connections } = useConnectionStore();
+  
+  // 获取连接配置中的高级选项
+  const connection = connections.find((c) => c.id === connectionId);
+  const advancedOptions = connection?.config.redis?.advancedOptions;
+  const databaseCount = advancedOptions?.databaseCount || 16;
+  const keyPageSize = advancedOptions?.keyPageSize || 1000;
+
+  // 添加调试信息
   const [keys, setKeys] = useState<RedisKey[]>([]);
   const [loading, setLoading] = useState(false);
   const [selectedKey, setSelectedKey] = useState<RedisKey | null>(null);
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState('');
   const [keyValue, setKeyValue] = useState('');
+  const [showFormattedJSON, setShowFormattedJSON] = useState(false);
   const [hashData, setHashData] = useState<Array<[string, string]>>([]);
   const [listData, setListData] = useState<string[]>([]);
   const [zsetData, setZsetData] = useState<Array<[string, number]>>([]);
   const [dbIndex, setDbIndex] = useState(0);
-  const [dbInfo, setDbInfo] = useState<{ key_count: number; used_memory: number } | null>(null);
+  const [dbInfo, setDbInfo] = useState<{ key_count: number; used_memory: number; redis_version: string } | null>(null);
   const [showSetTtlDialog, setShowSetTtlDialog] = useState(false);
   const [newTtl, setNewTtl] = useState('');
+
+  // 分页和加载更多
+  const [cursor, setCursor] = useState(0);
+  const [hasMore, setHasMore] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [isAtBottom, setIsAtBottom] = useState(false);
+  const loadMoreRef = useRef<HTMLDivElement>(null);
   
   // 新增 UI 功能状态
   const [showCommandDialog, setShowCommandDialog] = useState(false);
@@ -58,6 +78,17 @@ export function RedisBrowser({ connectionId }: RedisBrowserProps) {
   const [renameOldKey, setRenameOldKey] = useState('');
   const [renameNewKey, setRenameNewKey] = useState('');
   const [showExportDialog, setShowExportDialog] = useState(false);
+  const [showSlowlogDialog, setShowSlowlogDialog] = useState(false);
+  const [slowlogData, setSlowlogData] = useState<any[]>([]);
+  const [loadingSlowlog, setLoadingSlowlog] = useState(false);
+  const [showClientsDialog, setShowClientsDialog] = useState(false);
+  const [clientsData, setClientsData] = useState<any[]>([]);
+  const [loadingClients, setLoadingClients] = useState(false);
+  const [showMonitorDialog, setShowMonitorDialog] = useState(false);
+  const [monitorData, setMonitorData] = useState<any>(null);
+  const [loadingMonitor, setLoadingMonitor] = useState(false);
+  const monitorIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const [isSearchFocused, setIsSearchFocused] = useState(false);
   
   // 编辑器状态
   const [showAddFieldDialog, setShowAddFieldDialog] = useState(false);
@@ -71,6 +102,37 @@ export function RedisBrowser({ connectionId }: RedisBrowserProps) {
   const [newScore, setNewScore] = useState('');
   const [addPosition, setAddPosition] = useState<'left' | 'right'>('right');
 
+  // Key 详情加载状态
+  const [loadingKeyDetail, setLoadingKeyDetail] = useState(false);
+  
+  // Key 数据缓存
+  const keyDataCache = useRef<Map<string, { type: string; data: any }>>(new Map());
+
+  // 防止快速点击的 ref
+  const isLoadingRef = useRef(false);
+
+  // Hash 和 ZSet 分页状态
+  const [hashPagination, setHashPagination] = useState({ offset: 0, limit: 50, hasMore: true, total: 0 });
+  const [zsetPagination, setZsetPagination] = useState({ offset: 0, limit: 50, hasMore: true, total: 0 });
+  const [hashSearch, setHashSearch] = useState('');
+  const [zsetSearch, setZsetSearch] = useState('');
+  const hashScrollRef = useRef<HTMLDivElement>(null);
+  const zsetScrollRef = useRef<HTMLDivElement>(null);
+
+  // 搜索防抖状态
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
+
+  // 类型筛选状态
+  const [selectedType, setSelectedType] = useState<string>('all');
+  const typeOptions = [
+    { value: 'all', label: '全部类型' },
+    { value: 'string', label: 'String' },
+    { value: 'hash', label: 'Hash' },
+    { value: 'list', label: 'List' },
+    { value: 'set', label: 'Set' },
+    { value: 'zset', label: 'ZSet' },
+  ];
+
   // 加载数据库信息
   const loadDbInfo = useCallback(async () => {
     if (!connectionId) return;
@@ -78,75 +140,283 @@ export function RedisBrowser({ connectionId }: RedisBrowserProps) {
       const info = await invoke('get_redis_db_info', {
         connId: connectionId,
       });
-      setDbInfo(info as { key_count: number; used_memory: number });
+
+      // 解析 Redis INFO 命令的输出
+      const infoStr = info as string;
+      const keyCountMatch = infoStr.match(/db\d+:keys=(\d+)/);
+      const memoryMatch = infoStr.match(/used_memory:(\d+)/);
+      const versionMatch = infoStr.match(/redis_version:([\d.]+)/);
+
+      if (keyCountMatch) {
+        setDbInfo({
+          key_count: parseInt(keyCountMatch[1], 10),
+          used_memory: memoryMatch ? parseInt(memoryMatch[1], 10) : 0,
+          redis_version: versionMatch ? versionMatch[1] : 'unknown',
+        });
+      }
     } catch (error) {
-      console.error('加载数据库信息失败:', error);
     }
   }, [connectionId]);
 
-  // 加载 keys 列表
-  const loadKeys = useCallback(async () => {
-    if (!connectionId) return;
-    setLoading(true);
+  // 加载 keys 列表（支持分页和类型过滤）
+  const loadKeys = useCallback(async (reset: boolean = false) => {
+    if (!connectionId) {
+      return;
+    }
+
+    if (reset) {
+      setLoading(true);
+      setCursor(0);
+      setKeys([]);
+    } else {
+      setLoadingMore(true);
+    }
+
     try {
-      const pattern = searchQuery || '*';
-      const keyList: string[] = await invoke('get_redis_keys', {
+      const pattern = debouncedSearchQuery || '*';
+      const currentCursor = reset ? 0 : cursor;
+      const typeFilter = selectedType === 'all' ? null : selectedType;
+
+      const response = await invoke('get_redis_keys_by_type', {
         connId: connectionId,
         pattern,
+        keyType: typeFilter,
+        limit: keyPageSize,
+        cursor: currentCursor,
       });
 
-      // 为每个 key 获取类型、TTL 和内存占用
-      const keyDetails: RedisKey[] = [];
-      for (const key of keyList) {
+      // 尝试解析为对象
+      let parsedResponse;
+      if (typeof response === 'string') {
         try {
-          const [keyType, ttl, memoryUsage] = await Promise.all([
-            invoke<string>('get_redis_key_type', { connId: connectionId, key }),
-            invoke<number>('get_redis_key_ttl', { connId: connectionId, key }),
-            invoke<number>('get_redis_key_memory_usage', { connId: connectionId, key }).catch(() => 0),
-          ]);
-          keyDetails.push({
-            key,
-            type: keyType as RedisKeyType,
-            ttl,
-            memory_usage: memoryUsage,
-          });
+          parsedResponse = JSON.parse(response);
         } catch (e) {
-          console.error(`获取 key ${key} 详情失败:`, e);
+          throw new Error(`Failed to parse response: ${e}`);
         }
+      } else {
+        parsedResponse = response;
       }
 
-      setKeys(keyDetails);
+      // 防御性检查
+      if (!parsedResponse) {
+        throw new Error('Response is null or undefined');
+      }
+
+      if (!parsedResponse.keys) {
+        throw new Error('Response does not have keys field');
+      }
+
+      if (!Array.isArray(parsedResponse.keys)) {
+        throw new Error('keys is not an array');
+      }
+
+      // 简化版本：只使用 keys 名称，不获取详细信息
+      const keyDetails: RedisKey[] = parsedResponse.keys.map(key => ({
+        key,
+        type: selectedType === 'all' ? 'string' as RedisKeyType : selectedType as RedisKeyType,
+        ttl: -1,
+        memory_usage: 0,
+      }));
+
+      if (reset) {
+        setKeys(keyDetails);
+      } else {
+        setKeys(prev => [...prev, ...keyDetails]);
+      }
+
+      setCursor(parsedResponse.cursor);
+
+      // 如果返回空结果且不是重置操作，说明已经扫描完了所有匹配的 keys
+      if (parsedResponse.keys.length === 0 && !reset) {
+        setHasMore(false);
+      } else {
+        setHasMore(parsedResponse.has_more);
+      }
     } catch (error) {
-      console.error('加载 keys 失败:', error);
       alert(`加载 keys 失败: ${error}`);
     } finally {
       setLoading(false);
+      setLoadingMore(false);
     }
-  }, [connectionId, searchQuery]);
+  }, [connectionId, cursor, debouncedSearchQuery, keyPageSize, selectedType]);
+
+  // 搜索防抖
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery);
+    }, 500); // 500ms 防抖
+
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
 
   useEffect(() => {
-    loadKeys();
-  }, [loadKeys]);
+    // 当防抖后的搜索查询或类型筛选改变时，重新加载（重置分页）
+    loadKeys(true);
+  }, [connectionId, debouncedSearchQuery, selectedType]);
+
+  // Hash 和 ZSet 滚动监听
+  useEffect(() => {
+    const handleScroll = (container: HTMLElement | null, pagination: any, setPagination: any, loadData: () => void) => {
+      if (!container) return;
+      
+      const observer = new IntersectionObserver(
+        (entries) => {
+          const target = entries[0];
+          if (target.isIntersecting && pagination.hasMore) {
+            loadData();
+          }
+        },
+        { root: container, rootMargin: '100px', threshold: 0.1 }
+      );
+      
+      const sentinel = container.querySelector('.scroll-sentinel');
+      if (sentinel) observer.observe(sentinel);
+      
+      return () => observer.disconnect();
+    };
+    
+    if (selectedKey?.type === 'hash' && hashScrollRef.current) {
+      return handleScroll(hashScrollRef.current, hashPagination, setHashPagination, () => loadHashData(false));
+    }
+    if (selectedKey?.type === 'zset' && zsetScrollRef.current) {
+      return handleScroll(zsetScrollRef.current, zsetPagination, setZsetPagination, () => loadZSetData(false));
+    }
+  }, [hashPagination, zsetPagination, selectedKey]);
+
+  const handleLoadMore = () => {
+    if (!loadingMore && hasMore) {
+      loadKeys(false);
+    }
+  };
+
+  // 使用 IntersectionObserver 监听是否滚动到底部
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const target = entries[0];
+        if (target.isIntersecting && hasMore && !loadingMore) {
+          handleLoadMore();
+        }
+        
+        // 判断是否在底部
+        setIsAtBottom(target.isIntersecting && !hasMore);
+      },
+      {
+        root: null,
+        rootMargin: '100px',
+        threshold: 0.1,
+      }
+    );
+
+    const currentRef = loadMoreRef.current;
+    if (currentRef) {
+      observer.observe(currentRef);
+    }
+
+    return () => {
+      if (currentRef) {
+        observer.unobserve(currentRef);
+      }
+    };
+  }, [hasMore, loadingMore]);
+
+  // 搜索防抖
+  const handleSearchChange = (value: string) => {
+    setSearchQuery(value);
+  };
 
   useEffect(() => {
     loadDbInfo();
-  }, [loadDbInfo]);
+  }, [connectionId]);
 
   const filteredKeys = keys.filter((k) =>
     k.key.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   const handleSelectKey = async (key: RedisKey) => {
+    // 如果已经在加载，直接返回
+    if (isLoadingRef.current) {
+      return;
+    }
+
     setSelectedKey(key);
+    setShowFormattedJSON(false);
     if (!connectionId) return;
 
+    // 对于 hash 和 zset 类型，使用分页加载
+    if (key.type === 'hash' || key.type === 'zset') {
+      setKeyValue('');
+      setListData([]);
+      if (key.type === 'hash') {
+        setZsetData([]);
+        setHashPagination({ offset: 0, limit: 50, hasMore: true, total: 0 });
+        setHashSearch('');
+        loadHashData(true);
+      } else {
+        setHashData([]);
+        setZsetPagination({ offset: 0, limit: 50, hasMore: true, total: 0 });
+        setZsetSearch('');
+        loadZSetData(true);
+      }
+      return;
+    }
+
+    // 检查缓存
+    const cached = keyDataCache.current.get(key.key);
+    if (cached) {
+      const { type, data } = cached;
+      switch (type) {
+        case 'string':
+          setKeyValue(data);
+          setHashData([]);
+          setListData([]);
+          setZsetData([]);
+          break;
+        case 'hash':
+          setKeyValue('');
+          setHashData(data);
+          setListData([]);
+          setZsetData([]);
+          break;
+        case 'list':
+        case 'set':
+          setKeyValue('');
+          setHashData([]);
+          setListData(data);
+          setZsetData([]);
+          break;
+        case 'zset':
+          setKeyValue('');
+          setHashData([]);
+          setListData([]);
+          setZsetData(data);
+          break;
+      }
+      return;
+    }
+
+    // 设置加载状态
+    isLoadingRef.current = true;
+    setLoadingKeyDetail(true);
+
     try {
-      const value = await invoke<string>('get_redis_value', {
+      const response = await invoke<string>('get_redis_value', {
         connId: connectionId,
         key: key.key,
       });
 
-      switch (key.type) {
+      // get_redis_value 返回的是 JSON 字符串，格式为 {"type": "xxx", "value": ...}
+      const data = JSON.parse(response);
+      const valueType = data.type;
+      const value = data.value;
+
+      // 缓存数据（对于 hash 类型，转换为数组格式）
+      const cacheData = valueType === 'hash' 
+        ? Object.entries(value).map(([k, v]) => [k, v] as [string, string])
+        : value;
+      keyDataCache.current.set(key.key, { type: valueType, data: cacheData });
+
+      switch (valueType) {
         case 'string':
           setKeyValue(value);
           setHashData([]);
@@ -155,7 +425,7 @@ export function RedisBrowser({ connectionId }: RedisBrowserProps) {
           break;
         case 'hash':
           setKeyValue('');
-          setHashData(JSON.parse(value));
+          setHashData(cacheData as Array<[string, string]>);
           setListData([]);
           setZsetData([]);
           break;
@@ -163,19 +433,25 @@ export function RedisBrowser({ connectionId }: RedisBrowserProps) {
         case 'set':
           setKeyValue('');
           setHashData([]);
-          setListData(JSON.parse(value));
+          setListData(value);
           setZsetData([]);
           break;
         case 'zset':
           setKeyValue('');
           setHashData([]);
           setListData([]);
-          setZsetData(JSON.parse(value));
+          setZsetData(value);
           break;
       }
     } catch (error) {
-      console.error('加载 key 值失败:', error);
-      alert(`加载 key 值失败: ${error}`);
+      // 不使用 alert，而是设置错误状态
+      setKeyValue('');
+      setHashData([]);
+      setListData([]);
+      setZsetData([]);
+    } finally {
+      setLoadingKeyDetail(false);
+      isLoadingRef.current = false;
     }
   };
 
@@ -188,12 +464,15 @@ export function RedisBrowser({ connectionId }: RedisBrowserProps) {
         connId: connectionId,
         key,
       });
+      
+      // 清除缓存
+      keyDataCache.current.delete(key);
+      
       await loadKeys();
       if (selectedKey?.key === key) {
         setSelectedKey(null);
       }
     } catch (error) {
-      console.error('删除 key 失败:', error);
       alert(`删除 key 失败: ${error}`);
     }
   };
@@ -204,6 +483,68 @@ export function RedisBrowser({ connectionId }: RedisBrowserProps) {
 
   const handleAddKey = () => {
     alert('添加 key 功能开发中');
+  };
+
+  // 加载 hash 数据（分页）
+  const loadHashData = async (reset: boolean = false) => {
+    if (!connectionId || !selectedKey) return;
+    
+    if (reset) {
+      setHashPagination({ offset: 0, limit: 50, hasMore: true, total: 0 });
+    }
+    
+    try {
+      const response = await invoke('get_hash_fields_paginated', {
+        connId: connectionId,
+        key: selectedKey.key,
+        offset: reset ? 0 : hashPagination.offset,
+        limit: hashPagination.limit,
+        search: hashSearch || undefined,
+      });
+      
+      const result = JSON.parse(response as string);
+      
+      if (reset) {
+        setHashData(result.data);
+        setHashPagination(prev => ({ ...prev, total: result.total, hasMore: result.has_more, offset: result.data.length }));
+      } else {
+        setHashData(prev => [...prev, ...result.data]);
+        setHashPagination(prev => ({ ...prev, total: result.total, hasMore: result.has_more, offset: prev.offset + result.data.length }));
+      }
+    } catch (error) {
+      console.error('加载 hash 数据失败:', error);
+    }
+  };
+
+  // 加载 zset 数据（分页）
+  const loadZSetData = async (reset: boolean = false) => {
+    if (!connectionId || !selectedKey) return;
+    
+    if (reset) {
+      setZsetPagination({ offset: 0, limit: 50, hasMore: true, total: 0 });
+    }
+    
+    try {
+      const response = await invoke('get_zset_members_paginated', {
+        connId: connectionId,
+        key: selectedKey.key,
+        offset: reset ? 0 : zsetPagination.offset,
+        limit: zsetPagination.limit,
+        search: zsetSearch || undefined,
+      });
+      
+      const result = JSON.parse(response as string);
+      
+      if (reset) {
+        setZsetData(result.data);
+        setZsetPagination(prev => ({ ...prev, total: result.total, hasMore: result.has_more, offset: result.data.length }));
+      } else {
+        setZsetData(prev => [...prev, ...result.data]);
+        setZsetPagination(prev => ({ ...prev, total: result.total, hasMore: result.has_more, offset: prev.offset + result.data.length }));
+      }
+    } catch (error) {
+      console.error('加载 zset 数据失败:', error);
+    }
   };
 
   const handleSetTtl = async () => {
@@ -238,7 +579,6 @@ export function RedisBrowser({ connectionId }: RedisBrowserProps) {
         ttl,
       });
     } catch (error) {
-      console.error('设置 TTL 失败:', error);
       alert(`设置 TTL 失败: ${error}`);
     }
   };
@@ -263,7 +603,6 @@ export function RedisBrowser({ connectionId }: RedisBrowserProps) {
       loadKeys();
       loadDbInfo();
     } catch (error) {
-      console.error('重命名失败:', error);
       alert(`重命名失败: ${error}`);
     }
   };
@@ -282,7 +621,6 @@ export function RedisBrowser({ connectionId }: RedisBrowserProps) {
 
       setCommandOutput(result || 'OK');
     } catch (error) {
-      console.error('执行命令失败:', error);
       setCommandOutput(`错误: ${error}`);
     }
   };
@@ -310,8 +648,60 @@ export function RedisBrowser({ connectionId }: RedisBrowserProps) {
       setShowExportDialog(false);
       alert('导出成功');
     } catch (error) {
-      console.error('导出失败:', error);
       alert(`导出失败: ${error}`);
+    }
+  };
+
+  const handleLoadSlowlog = async () => {
+    if (!connectionId) return;
+
+    setLoadingSlowlog(true);
+    try {
+      const result = await invoke('get_redis_slowlog', {
+        connId: connectionId,
+      }) as string;
+
+      // 解析慢查询日志数据
+      // Redis SLOWLOG GET 返回的是数组，每个元素包含 [id, timestamp, duration, command]
+      const logs = JSON.parse(result);
+      setSlowlogData(Array.isArray(logs) ? logs : []);
+      setShowSlowlogDialog(true);
+    } catch (error) {
+      alert(`获取慢查询日志失败: ${error}`);
+    } finally {
+      setLoadingSlowlog(false);
+    }
+  };
+
+  const handleLoadClients = async () => {
+    if (!connectionId) return;
+
+    setLoadingClients(true);
+    try {
+      const result = await invoke('get_redis_clients', {
+        connId: connectionId,
+      }) as string;
+
+      // 解析客户端连接数据
+      // Redis CLIENT LIST 返回的是字符串，每个客户端信息一行
+      const lines = result.split('\n').filter(line => line.trim());
+      const clients = lines.map(line => {
+        const clientInfo: any = {};
+        line.split(' ').forEach(pair => {
+          const [key, value] = pair.split('=');
+          if (key && value) {
+            clientInfo[key] = value;
+          }
+        });
+        return clientInfo;
+      });
+
+      setClientsData(clients);
+      setShowClientsDialog(true);
+    } catch (error) {
+      alert(`获取客户端连接失败: ${error}`);
+    } finally {
+      setLoadingClients(false);
     }
   };
 
@@ -331,13 +721,15 @@ export function RedisBrowser({ connectionId }: RedisBrowserProps) {
         db_index: index,
       });
       
+      // 清除缓存
+      keyDataCache.current.clear();
+      
       setDbIndex(index);
       setSelectedKey(null);
       setSelectedKeys(new Set());
       loadKeys();
       loadDbInfo();
     } catch (error) {
-      console.error('切换数据库失败:', error);
       alert(`切换数据库失败: ${error}`);
     }
   };
@@ -363,7 +755,6 @@ export function RedisBrowser({ connectionId }: RedisBrowserProps) {
       loadKeys();
       loadDbInfo();
     } catch (error) {
-      console.error('批量删除失败:', error);
       alert(`批量删除失败: ${error}`);
     }
   };
@@ -399,7 +790,6 @@ export function RedisBrowser({ connectionId }: RedisBrowserProps) {
       setShowAddFieldDialog(false);
       loadDbInfo();
     } catch (error) {
-      console.error('添加字段失败:', error);
       alert(`添加字段失败: ${error}`);
     }
   };
@@ -418,7 +808,6 @@ export function RedisBrowser({ connectionId }: RedisBrowserProps) {
       setHashData(hashData.filter(([f]) => f !== field));
       loadDbInfo();
     } catch (error) {
-      console.error('删除字段失败:', error);
       alert(`删除字段失败: ${error}`);
     }
   };
@@ -452,7 +841,6 @@ export function RedisBrowser({ connectionId }: RedisBrowserProps) {
       setShowAddElementDialog(false);
       loadDbInfo();
     } catch (error) {
-      console.error('添加元素失败:', error);
       alert(`添加元素失败: ${error}`);
     }
   };
@@ -476,7 +864,6 @@ export function RedisBrowser({ connectionId }: RedisBrowserProps) {
       
       loadDbInfo();
     } catch (error) {
-      console.error('弹出元素失败:', error);
       alert(`弹出元素失败: ${error}`);
     }
   };
@@ -497,7 +884,6 @@ export function RedisBrowser({ connectionId }: RedisBrowserProps) {
       setListData(newData);
       loadDbInfo();
     } catch (error) {
-      console.error('设置元素失败:', error);
       alert(`设置元素失败: ${error}`);
     }
   };
@@ -516,7 +902,6 @@ export function RedisBrowser({ connectionId }: RedisBrowserProps) {
       setListData(listData.filter((_, i) => i !== index));
       loadDbInfo();
     } catch (error) {
-      console.error('删除元素失败:', error);
       alert(`删除元素失败: ${error}`);
     }
   };
@@ -539,7 +924,6 @@ export function RedisBrowser({ connectionId }: RedisBrowserProps) {
       loadDbInfo();
       alert(`成功添加 ${addedCount} 个成员`);
     } catch (error) {
-      console.error('添加成员失败:', error);
       alert(`添加成员失败: ${error}`);
     }
   };
@@ -559,7 +943,6 @@ export function RedisBrowser({ connectionId }: RedisBrowserProps) {
       loadDbInfo();
       alert(`成功删除 ${removedCount} 个成员`);
     } catch (error) {
-      console.error('删除成员失败:', error);
       alert(`删除成员失败: ${error}`);
     }
   };
@@ -583,7 +966,6 @@ export function RedisBrowser({ connectionId }: RedisBrowserProps) {
       setShowAddElementDialog(false);
       loadDbInfo();
     } catch (error) {
-      console.error('添加成员失败:', error);
       alert(`添加成员失败: ${error}`);
     }
   };
@@ -602,7 +984,6 @@ export function RedisBrowser({ connectionId }: RedisBrowserProps) {
       setZsetData(zsetData.filter(([m]) => m !== member));
       loadDbInfo();
     } catch (error) {
-      console.error('删除成员失败:', error);
       alert(`删除成员失败: ${error}`);
     }
   };
@@ -622,7 +1003,6 @@ export function RedisBrowser({ connectionId }: RedisBrowserProps) {
       setZsetData(newData);
       loadDbInfo();
     } catch (error) {
-      console.error('更新分数失败:', error);
       alert(`更新分数失败: ${error}`);
     }
   };
@@ -658,9 +1038,27 @@ export function RedisBrowser({ connectionId }: RedisBrowserProps) {
         ttl: selectedKey.ttl === -1 ? null : selectedKey.ttl,
       });
 
+      // 更新缓存
+      let cacheData;
+      switch (selectedKey.type) {
+        case 'string':
+          cacheData = value;
+          break;
+        case 'hash':
+          cacheData = hashData;
+          break;
+        case 'list':
+        case 'set':
+          cacheData = listData;
+          break;
+        case 'zset':
+          cacheData = zsetData;
+          break;
+      }
+      keyDataCache.current.set(selectedKey.key, { type: selectedKey.type, data: cacheData });
+
       alert('保存成功');
     } catch (error) {
-      console.error('保存值失败:', error);
       alert(`保存值失败: ${error}`);
     }
   };
@@ -669,6 +1067,33 @@ export function RedisBrowser({ connectionId }: RedisBrowserProps) {
     if (ttl === -1) return '永不过期';
     if (ttl === -2) return '已过期';
     return `${ttl}秒`;
+  };
+
+  const formatDuration = (seconds: number) => {
+    if (seconds < 60) return `${seconds}秒`;
+    if (seconds < 3600) return `${Math.floor(seconds / 60)}分${seconds % 60}秒`;
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    return `${hours}小时${minutes}分`;
+  };
+
+  // 检测字符串是否是有效的 JSON
+  const tryParseJSON = (str: string): any | null => {
+    if (!str || typeof str !== 'string') return null;
+    str = str.trim();
+    if (str.startsWith('{') || str.startsWith('[')) {
+      try {
+        return JSON.parse(str);
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  };
+
+  // 格式化 JSON 为美化字符串
+  const formatJSON = (value: any): string => {
+    return JSON.stringify(value, null, 2);
   };
 
   const renderValueEditor = () => {
@@ -682,28 +1107,53 @@ export function RedisBrowser({ connectionId }: RedisBrowserProps) {
 
     switch (selectedKey.type) {
       case 'string':
-        return (
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Clock className="h-4 w-4" />
-                TTL: {formatTTL(selectedKey.ttl)}
+        {
+          const parsedJSON = tryParseJSON(keyValue);
+          const isJSON = parsedJSON !== null;
+          const displayValue = showFormattedJSON && isJSON ? formatJSON(parsedJSON) : keyValue;
+
+          return (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Clock className="h-4 w-4" />
+                  TTL: {formatTTL(selectedKey.ttl)}
+                </div>
+                <div className="flex gap-2">
+                  {isJSON && (
+                    <Button
+                      variant="outline"
+                      onClick={() => setShowFormattedJSON(!showFormattedJSON)}
+                    >
+                      {showFormattedJSON ? '原始格式' : 'JSON 格式'}
+                    </Button>
+                  )}
+                  <Button variant="outline" onClick={() => setShowSetTtlDialog(true)}>
+                    设置 TTL
+                  </Button>
+                </div>
               </div>
-              <Button size="sm" variant="outline" onClick={() => setShowSetTtlDialog(true)}>
-                设置 TTL
-              </Button>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">值</label>
+                {showFormattedJSON && isJSON ? (
+                  <textarea
+                    value={displayValue}
+                    readOnly
+                    className="w-full min-h-[200px] p-3 text-sm border rounded-md resize-none font-mono bg-muted/30"
+                    spellCheck={false}
+                  />
+                ) : (
+                  <Input
+                    value={displayValue}
+                    onChange={(e) => setKeyValue(e.target.value)}
+                    className="font-mono"
+                  />
+                )}
+              </div>
+              <Button onClick={handleSaveValue}>保存</Button>
             </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">值</label>
-              <Input
-                value={keyValue}
-                onChange={(e) => setKeyValue(e.target.value)}
-                className="font-mono"
-              />
-            </div>
-            <Button onClick={handleSaveValue}>保存</Button>
-          </div>
-        );
+          );
+        }
 
       case 'hash':
         return (
@@ -711,63 +1161,66 @@ export function RedisBrowser({ connectionId }: RedisBrowserProps) {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Clock className="h-4 w-4" />
-                TTL: {formatTTL(selectedKey.ttl)}
+                TTL: {formatTTL(selectedKey.ttl)} | 共 {hashPagination.total} 个字段
               </div>
               <div className="flex gap-2">
-                <Button size="sm" variant="outline" onClick={() => setShowSetTtlDialog(true)}>
-                  设置 TTL
-                </Button>
-                <Button size="sm" onClick={() => setShowAddFieldDialog(true)}>
-                  <Plus className="h-4 w-4 mr-1" />
-                  添加字段
-                </Button>
+                <Input
+                  placeholder="搜索字段..."
+                  value={hashSearch}
+                  onChange={(e) => { setHashSearch(e.target.value); loadHashData(true); }}
+                  className="w-40"
+                />
+                <Button variant="outline" onClick={() => setShowSetTtlDialog(true)}>设置 TTL</Button>
+                <Button onClick={() => setShowAddFieldDialog(true)}><Plus className="h-4 w-4 mr-1" />添加字段</Button>
               </div>
             </div>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-1/3">字段</TableHead>
-                  <TableHead className="w-1/3">值</TableHead>
-                  <TableHead className="w-1/6">操作</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {hashData.map(([field, value], index) => (
-                  <TableRow key={index}>
-                    <TableCell className="font-mono">{field}</TableCell>
-                    <TableCell>
-                      {editingHashIndex === index ? (
-                        <Input
-                          value={value}
-                          onChange={(e) => handleEditHashField(index, e.target.value)}
-                          onBlur={() => setEditingHashIndex(null)}
-                          onKeyDown={(e) => e.key === 'Enter' && setEditingHashIndex(null)}
-                          className="font-mono"
-                          autoFocus
-                        />
-                      ) : (
-                        <span 
-                          className="font-mono cursor-pointer hover:bg-muted px-1 rounded"
-                          onClick={() => setEditingHashIndex(index)}
-                        >
-                          {value}
-                        </span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <Button
-                        size="icon-xs"
-                        variant="ghost"
-                        onClick={() => handleDeleteHashField(field)}
-                      >
-                        <Trash2 className="h-3 w-3" />
-                      </Button>
-                    </TableCell>
+            <ScrollArea ref={hashScrollRef} className="h-[500px]">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-1/3">字段</TableHead>
+                    <TableHead className="w-1/3">值</TableHead>
+                    <TableHead className="w-1/6">操作</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-            <Button onClick={handleSaveValue}>保存</Button>
+                </TableHeader>
+                <TableBody>
+                  {hashData.map(([field, value], index) => (
+                    <TableRow key={index}>
+                      <TableCell className="font-mono">{field}</TableCell>
+                      <TableCell>
+                        {editingHashIndex === index ? (
+                          <Input
+                            value={value}
+                            onChange={(e) => handleEditHashField(index, e.target.value)}
+                            onBlur={() => setEditingHashIndex(null)}
+                            onKeyDown={(e) => e.key === 'Enter' && setEditingHashIndex(null)}
+                            className="font-mono"
+                            autoFocus
+                          />
+                        ) : (
+                          <span 
+                            className="font-mono cursor-pointer hover:bg-muted px-1 rounded"
+                            onClick={() => setEditingHashIndex(index)}
+                          >
+                            {value}
+                          </span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <Button
+                          size="icon-xs"
+                          variant="ghost"
+                          onClick={() => handleDeleteHashField(field)}
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+              {hashPagination.hasMore && <div className="scroll-sentinel h-1" />}
+            </ScrollArea>
           </div>
         );
 
@@ -780,17 +1233,17 @@ export function RedisBrowser({ connectionId }: RedisBrowserProps) {
                 TTL: {formatTTL(selectedKey.ttl)}
               </div>
               <div className="flex gap-2">
-                <Button size="sm" variant="outline" onClick={() => setShowSetTtlDialog(true)}>
+                <Button variant="outline" onClick={() => setShowSetTtlDialog(true)}>
                   设置 TTL
                 </Button>
-                <Button size="sm" onClick={() => {
+                <Button onClick={() => {
                   setAddPosition('left');
                   setShowAddElementDialog(true);
                 }}>
                   <Plus className="h-4 w-4 mr-1" />
                   添加到头部
                 </Button>
-                <Button size="sm" onClick={() => {
+                <Button onClick={() => {
                   setAddPosition('right');
                   setShowAddElementDialog(true);
                 }}>
@@ -802,7 +1255,7 @@ export function RedisBrowser({ connectionId }: RedisBrowserProps) {
             <div className="space-y-2">
               {listData.map((item, index) => (
                 <div key={index} className="flex items-center gap-2 p-2 bg-muted rounded group">
-                  <span className="text-xs text-muted-foreground w-8">{index}</span>
+                  <span className="text-xs text-muted-foreground w-8 shrink-0">{index}</span>
                   {editingListIndex === index ? (
                     <Input
                       value={item}
@@ -816,8 +1269,8 @@ export function RedisBrowser({ connectionId }: RedisBrowserProps) {
                       autoFocus
                     />
                   ) : (
-                    <span 
-                      className="flex-1 font-mono cursor-pointer hover:bg-muted-foreground/10 px-1 rounded truncate"
+                    <span
+                      className="flex-1 font-mono cursor-pointer hover:bg-muted-foreground/10 px-1 rounded break-all"
                       onClick={() => setEditingListIndex(index)}
                       title={item}
                     >
@@ -827,7 +1280,7 @@ export function RedisBrowser({ connectionId }: RedisBrowserProps) {
                   <Button
                     size="icon-xs"
                     variant="ghost"
-                    className="opacity-0 group-hover:opacity-100"
+                    className="opacity-0 group-hover:opacity-100 shrink-0"
                     onClick={() => handleDeleteListElement(index)}
                   >
                     <Trash2 className="h-3 w-3" />
@@ -837,10 +1290,10 @@ export function RedisBrowser({ connectionId }: RedisBrowserProps) {
             </div>
             {listData.length > 0 && (
               <div className="flex gap-2">
-                <Button size="sm" variant="outline" onClick={() => handlePopListElement('left')}>
+                <Button variant="outline" onClick={() => handlePopListElement('left')}>
                   弹出头部
                 </Button>
-                <Button size="sm" variant="outline" onClick={() => handlePopListElement('right')}>
+                <Button variant="outline" onClick={() => handlePopListElement('right')}>
                   弹出尾部
                 </Button>
               </div>
@@ -858,10 +1311,10 @@ export function RedisBrowser({ connectionId }: RedisBrowserProps) {
                 TTL: {formatTTL(selectedKey.ttl)}
               </div>
               <div className="flex gap-2">
-                <Button size="sm" variant="outline" onClick={() => setShowSetTtlDialog(true)}>
+                <Button variant="outline" onClick={() => setShowSetTtlDialog(true)}>
                   设置 TTL
                 </Button>
-                <Button size="sm" onClick={() => setShowAddElementDialog(true)}>
+                <Button onClick={() => setShowAddElementDialog(true)}>
                   <Plus className="h-4 w-4 mr-1" />
                   添加成员
                 </Button>
@@ -870,14 +1323,14 @@ export function RedisBrowser({ connectionId }: RedisBrowserProps) {
             <div className="space-y-2">
               {listData.map((item, index) => (
                 <div key={index} className="flex items-center gap-2 p-2 bg-muted rounded group">
-                  <span className="text-xs text-muted-foreground w-8">{index}</span>
-                  <span className="flex-1 font-mono truncate" title={item}>
+                  <span className="text-xs text-muted-foreground w-8 shrink-0">{index}</span>
+                  <span className="flex-1 font-mono break-all" title={item}>
                     {item}
                   </span>
                   <Button
                     size="icon-xs"
                     variant="ghost"
-                    className="opacity-0 group-hover:opacity-100"
+                    className="opacity-0 group-hover:opacity-100 shrink-0"
                     onClick={() => handleRemoveSetMembers([item])}
                   >
                     <Trash2 className="h-3 w-3" />
@@ -895,77 +1348,80 @@ export function RedisBrowser({ connectionId }: RedisBrowserProps) {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Clock className="h-4 w-4" />
-                TTL: {formatTTL(selectedKey.ttl)}
+                TTL: {formatTTL(selectedKey.ttl)} | 共 {zsetPagination.total} 个成员
               </div>
               <div className="flex gap-2">
-                <Button size="sm" variant="outline" onClick={() => setShowSetTtlDialog(true)}>
-                  设置 TTL
-                </Button>
-                <Button size="sm" onClick={() => setShowAddElementDialog(true)}>
-                  <Plus className="h-4 w-4 mr-1" />
-                  添加成员
-                </Button>
+                <Input
+                  placeholder="搜索成员..."
+                  value={zsetSearch}
+                  onChange={(e) => { setZsetSearch(e.target.value); loadZSetData(true); }}
+                  className="w-40"
+                />
+                <Button variant="outline" onClick={() => setShowSetTtlDialog(true)}>设置 TTL</Button>
+                <Button onClick={() => setShowAddElementDialog(true)}><Plus className="h-4 w-4 mr-1" />添加成员</Button>
               </div>
             </div>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-1/4">排名</TableHead>
-                  <TableHead className="w-1/4">分数</TableHead>
-                  <TableHead className="w-1/3">成员</TableHead>
-                  <TableHead className="w-1/6">操作</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {zsetData
-                  .sort((a, b) => b[1] - a[1])
-                  .map(([member, score], index) => (
-                  <TableRow key={index}>
-                    <TableCell className="text-center">{index + 1}</TableCell>
-                    <TableCell>
-                      {editingZSetIndex === index ? (
-                        <Input
-                          type="number"
-                          step="0.01"
-                          value={newScore}
-                          onChange={(e) => setNewScore(e.target.value)}
-                          onBlur={() => {
-                            if (newScore.trim()) {
-                              handleUpdateZSetScore(member, parseFloat(newScore));
-                            }
-                            setEditingZSetIndex(null);
-                          }}
-                          onKeyDown={(e) => e.key === 'Enter' && handleUpdateZSetScore(member, parseFloat(newScore))}
-                          className="w-20"
-                          autoFocus
-                        />
-                      ) : (
-                        <span 
-                          className="font-mono cursor-pointer hover:bg-muted px-1 rounded"
-                          onClick={() => {
-                            setEditingZSetIndex(index);
-                            setNewScore(score.toString());
-                          }}
-                        >
-                          {score}
-                        </span>
-                      )}
-                    </TableCell>
-                    <TableCell className="font-mono">{member}</TableCell>
-                    <TableCell>
-                      <Button
-                        size="icon-xs"
-                        variant="ghost"
-                        onClick={() => handleRemoveZSetMember(member)}
-                      >
-                        <Trash2 className="h-3 w-3" />
-                      </Button>
-                    </TableCell>
+            <ScrollArea ref={zsetScrollRef} className="h-[500px]">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-1/4">排名</TableHead>
+                    <TableHead className="w-1/4">分数</TableHead>
+                    <TableHead className="w-1/3">成员</TableHead>
+                    <TableHead className="w-1/6">操作</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-            <Button onClick={handleSaveValue}>保存</Button>
+                </TableHeader>
+                <TableBody>
+                  {zsetData
+                    .sort((a, b) => b[1] - a[1])
+                    .map(([member, score], index) => (
+                    <TableRow key={index}>
+                      <TableCell className="text-center">{index + 1}</TableCell>
+                      <TableCell>
+                        {editingZSetIndex === index ? (
+                          <Input
+                            type="number"
+                            step="0.01"
+                            value={newScore}
+                            onChange={(e) => setNewScore(e.target.value)}
+                            onBlur={() => {
+                              if (newScore.trim()) {
+                                handleUpdateZSetScore(member, parseFloat(newScore));
+                              }
+                              setEditingZSetIndex(null);
+                            }}
+                            onKeyDown={(e) => e.key === 'Enter' && handleUpdateZSetScore(member, parseFloat(newScore))}
+                            className="w-20"
+                            autoFocus
+                          />
+                        ) : (
+                          <span 
+                            className="font-mono cursor-pointer hover:bg-muted px-1 rounded"
+                            onClick={() => {
+                              setEditingZSetIndex(index);
+                              setNewScore(score.toString());
+                            }}
+                          >
+                            {score}
+                          </span>
+                        )}
+                      </TableCell>
+                      <TableCell className="font-mono">{member}</TableCell>
+                      <TableCell>
+                        <Button
+                          size="icon-xs"
+                          variant="ghost"
+                          onClick={() => handleRemoveZSetMember(member)}
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+              {zsetPagination.hasMore && <div className="scroll-sentinel h-1" />}
+            </ScrollArea>
           </div>
         );
 
@@ -994,153 +1450,287 @@ export function RedisBrowser({ connectionId }: RedisBrowserProps) {
               onChange={(e) => handleSelectDb(parseInt(e.target.value))}
               className="text-xs bg-background border rounded px-2 py-1 transition-all duration-200"
             >
-              {Array.from({ length: 16 }, (_, i) => (
+              {Array.from({ length: databaseCount }, (_, i) => (
                 <option key={i} value={i}>
                   DB{i}
                 </option>
               ))}
             </select>
           </div>
-          {dbInfo && (
-            <div className="text-xs text-muted-foreground space-y-1 transition-all duration-200">
-              <div className="flex justify-between">
-                <span>Keys:</span>
-                <span className="font-mono transition-opacity duration-200">{dbInfo.key_count}</span>
-              </div>
-              <div className="flex justify-between">
-                <span>内存:</span>
-                <span className="font-mono transition-opacity duration-200">{(dbInfo.used_memory / 1024 / 1024).toFixed(2)} MB</span>
-              </div>
+          <div className="text-xs text-muted-foreground space-y-1 transition-all duration-200">
+            <div className="flex justify-between">
+              <span>Keys:</span>
+              <span className="font-mono transition-opacity duration-200">
+                {dbInfo ? dbInfo.key_count : '--'}
+              </span>
             </div>
-          )}
+            <div className="flex justify-between">
+              <span>内存:</span>
+              <span className="font-mono transition-opacity duration-200">
+                {dbInfo ? `${(dbInfo.used_memory / 1024 / 1024).toFixed(2)} MB` : '-- MB'}
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span>版本:</span>
+              <span className="font-mono transition-opacity duration-200">
+                {dbInfo ? dbInfo.redis_version : '--'}
+              </span>
+            </div>
+          </div>
         </div>
 
         {/* 搜索和操作工具栏 */}
-        <div className="p-3 border-b space-y-2">
-          <div className="relative">
-            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="搜索 keys..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9"
-            />
-          </div>
-          {/* 紧凑的工具栏 */}
-          <div className="flex items-center gap-1 flex-shrink-0 overflow-x-auto whitespace-nowrap min-w-max">
-            {/* 第一组：添加、删除 */}
-            <Button size="sm" variant="ghost" onClick={handleAddKey}>
-              <Plus className="h-3.5 w-3.5 mr-1.5" />
-              添加
-            </Button>
-            <Button 
-              size="sm" 
-              variant="ghost" 
-              onClick={handleBatchDelete} 
-              disabled={selectedKeys.size === 0}
-              className="text-destructive hover:text-destructive"
+        <div className="p-3 border-b space-y-3 min-w-0">
+          {/* 第一行：搜索和筛选 */}
+          <div className="flex gap-2 min-w-0">
+            <div className="relative flex-1 min-w-0 transition-all duration-300 ease-in-out" style={{ flex: isSearchFocused ? '3' : '1' }}>
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground flex-shrink-0" />
+              <Input
+                placeholder="搜索 keys (支持通配符 *)..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onFocus={() => setIsSearchFocused(true)}
+                onBlur={() => setIsSearchFocused(false)}
+                className="pl-9 h-10"
+              />
+            </div>
+            <select
+              value={selectedType}
+              onChange={(e) => setSelectedType(e.target.value)}
+              className="bg-background border rounded px-3 py-2 text-sm h-10 transition-all duration-300 ease-in-out flex-shrink-0"
+              style={{ width: isSearchFocused ? '96px' : '128px' }}
             >
-              <Trash2 className="h-3.5 w-3.5 mr-1.5" />
-              删除
-            </Button>
-
-            {/* 分隔线 */}
-            <div className="w-px h-4 bg-border mx-1 shrink-0" />
-
-            {/* 第二组：刷新 */}
-            <Button size="sm" variant="ghost" onClick={handleRefresh} disabled={loading}>
-              <RefreshCw className={cn("h-3.5 w-3.5 mr-1.5", loading && "animate-spin")} />
-              刷新
-            </Button>
-
-            {/* 分隔线 */}
-            <div className="w-px h-4 bg-border mx-1 shrink-0" />
-
-            {/* 第三组：命令、导出 */}
-            <Button size="sm" variant="ghost" onClick={() => setShowCommandDialog(true)}>
-              <Terminal className="h-3.5 w-3.5 mr-1.5" />
-              命令
-            </Button>
-            <Button size="sm" variant="ghost" onClick={() => setShowExportDialog(true)}>
-              <Download className="h-3.5 w-3.5 mr-1.5" />
-              导出
-            </Button>
+              {typeOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
           </div>
+
+          {/* 第二行：操作按钮 */}
+          <TooltipProvider>
+            <div className="flex items-center gap-1 flex-wrap">
+              {/* 第一组：添加、删除 */}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button size="icon" variant="ghost" onClick={handleAddKey}>
+                    <Plus className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>添加</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    onClick={handleBatchDelete}
+                    disabled={selectedKeys.size === 0}
+                    className="text-destructive hover:text-destructive"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>删除选中</TooltipContent>
+              </Tooltip>
+
+              {/* 分隔线 */}
+              <div className="w-px h-4 bg-border mx-1 shrink-0" />
+
+              {/* 第二组：刷新 */}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button size="icon" variant="ghost" onClick={handleRefresh} disabled={loading}>
+                    <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>刷新</TooltipContent>
+              </Tooltip>
+
+              {/* 分隔线 */}
+              <div className="w-px h-4 bg-border mx-1 shrink-0" />
+
+              {/* 第三组：命令、导出 */}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button size="icon" variant="ghost" onClick={() => setShowCommandDialog(true)}>
+                    <Terminal className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>执行命令</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button size="icon" variant="ghost" onClick={() => setShowExportDialog(true)}>
+                    <Download className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>导出</TooltipContent>
+              </Tooltip>
+
+              {/* 分隔线 */}
+              <div className="w-px h-4 bg-border mx-1 shrink-0" />
+
+              {/* 第四组：高级功能 */}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button size="icon" variant="ghost" onClick={handleLoadSlowlog} disabled={loadingSlowlog}>
+                    <Clock className={cn("h-4 w-4", loadingSlowlog && "animate-spin")} />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>慢查询日志</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button size="icon" variant="ghost" onClick={handleLoadClients} disabled={loadingClients}>
+                    <Terminal className={cn("h-4 w-4", loadingClients && "animate-spin")} />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>客户端连接</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button size="icon" variant="ghost" onClick={() => setShowMonitorDialog(true)}>
+                    <Activity className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>实时监控</TooltipContent>
+              </Tooltip>
+            </div>
+          </TooltipProvider>
         </div>
 
-        <ScrollArea className="flex-1">
-          <div className="p-2 space-y-1">
+        <ScrollArea className="flex-1 min-h-0">
+          <div className="p-2 space-y-1 min-h-full">
             {loading && filteredKeys.length === 0 ? (
               <div className="flex items-center justify-center py-8">
                 <RefreshCw className="h-5 w-5 animate-spin text-primary" />
               </div>
             ) : (
-              filteredKeys.map((key) => (
-              <ContextMenu key={key.key}>
-                <ContextMenuTrigger asChild>
-                  <div
-                    className={`
-                      group flex items-center justify-between p-2 rounded-md cursor-pointer transition-colors
-                      ${selectedKey?.key === key.key ? 'bg-primary/10 text-primary' : 'hover:bg-muted'}
-                    `}
-                    onClick={() => handleSelectKey(key)}
-                  >
-                    <div className="flex items-center gap-2 flex-1 min-w-0">
-                      <Checkbox
-                        checked={selectedKeys.has(key.key)}
-                        onCheckedChange={(checked) => {
-                          handleToggleSelectKey(key.key);
-                          if (checked as boolean) {
-                            handleSelectKey(key);
-                          }
-                        }}
-                        onClick={(e) => e.stopPropagation()}
-                      />
-                      <div className="flex-1 min-w-0">
-                        <div className="font-mono text-sm truncate">{key.key}</div>
-                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                          <span>{key.type}</span>
-                          {key.memory_usage !== undefined && (
-                            <span className="text-[10px]">({formatMemory(key.memory_usage)})</span>
-                          )}
+              <>
+                {filteredKeys.length === 0 && !loading ? (
+                  <div className="text-center py-8 text-sm text-muted-foreground">
+                    {selectedType !== 'all' ? (
+                      <>
+                        <div className="mb-2">没有找到 "{selectedType}" 类型的 keys</div>
+                        <div className="text-xs">请尝试选择其他类型或清除筛选</div>
+                      </>
+                    ) : searchQuery ? (
+                      <>
+                        <div className="mb-2">没有找到匹配 "{searchQuery}" 的 keys</div>
+                        <div className="text-xs">请尝试其他搜索词</div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="mb-2">没有找到任何 keys</div>
+                        <div className="text-xs">当前数据库为空</div>
+                      </>
+                    )}
+                  </div>
+                ) : (
+                  <>
+                    {filteredKeys.map((key) => (
+                <ContextMenu key={key.key}>
+                  <ContextMenuTrigger asChild>
+                    <div
+                      className={`
+                        group flex items-center justify-between p-2 rounded-md cursor-pointer transition-all duration-200 ease-in-out
+                        ${selectedKey?.key === key.key ? 'bg-primary/10 text-primary scale-[1.02]' : 'hover:bg-muted hover:scale-[1.01]'}
+                      `}
+                      onClick={() => handleSelectKey(key)}
+                    >
+                      <div className="flex items-center gap-2 flex-1 min-w-0">
+                        <Checkbox
+                          checked={selectedKeys.has(key.key)}
+                          onCheckedChange={(checked) => {
+                            handleToggleSelectKey(key.key);
+                          }}
+                          onClick={(e) => e.stopPropagation()}
+                          className="transition-all duration-200 shrink-0"
+                        />
+                        <div className="flex-1 min-w-0 flex flex-col">
+                          <div 
+                            className="font-mono text-sm break-words transition-all duration-200"
+                            title={key.key}
+                          >
+                            {key.key}
+                          </div>
+                          <div className="flex items-center gap-2 text-xs text-muted-foreground transition-all duration-200 mt-0.5">
+                            <span className="px-1.5 py-0.5 rounded bg-muted/50 shrink-0">{key.type}</span>
+                            {key.memory_usage !== undefined && (
+                              <span className="text-[10px] shrink-0">({formatMemory(key.memory_usage)})</span>
+                            )}
+                          </div>
                         </div>
                       </div>
+                      <Button
+                        variant="ghost"
+                        size="icon-xs"
+                        className="opacity-0 group-hover:opacity-100 transition-all duration-200 hover:scale-110 shrink-0 ml-2"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteKey(key.key);
+                        }}
+                      >
+                        <Trash2 className="h-3 w-3 transition-transform duration-200 group-hover:rotate-12" />
+                      </Button>
                     </div>
-                    <Button
-                      variant="ghost"
-                      size="icon-xs"
-                      className="opacity-0 group-hover:opacity-100 transition-opacity"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDeleteKey(key.key);
-                      }}
-                    >
-                      <Trash2 className="h-3 w-3" />
-                    </Button>
-                  </div>
-                </ContextMenuTrigger>
-                <ContextMenuContent>
-                  <ContextMenuItem onClick={() => {
-                    setRenameOldKey(key.key);
-                    setRenameNewKey(key.key);
-                    setShowRenameDialog(true);
-                  }}>
-                    <Edit2 className="h-3.5 w-3.5 mr-2" />
-                    重命名
-                  </ContextMenuItem>
-                  <ContextMenuSeparator />
-                  <ContextMenuItem onClick={() => handleDeleteKey(key.key)} className="text-destructive">
-                    <Trash2 className="h-3.5 w-3.5 mr-2" />
-                    删除
-                  </ContextMenuItem>
-                </ContextMenuContent>
-              </ContextMenu>
-            )))}
+                  </ContextMenuTrigger>
+                  <ContextMenuContent>
+                    <ContextMenuItem onClick={() => {
+                      setRenameOldKey(key.key);
+                      setRenameNewKey(key.key);
+                      setShowRenameDialog(true);
+                    }}>
+                      <Edit2 className="h-3.5 w-3.5 mr-2" />
+                      重命名
+                    </ContextMenuItem>
+                    <ContextMenuSeparator />
+                    <ContextMenuItem onClick={() => handleDeleteKey(key.key)} className="text-destructive">
+                      <Trash2 className="h-3.5 w-3.5 mr-2" />
+                      删除
+                    </ContextMenuItem>
+                  </ContextMenuContent>
+                </ContextMenu>
+              ))}
+
+              {/* 加载中提示 */}
+              {loadingMore && (
+                <div className="flex justify-center py-4">
+                  <RefreshCw className="h-5 w-5 animate-spin text-primary" />
+                </div>
+              )}
+
+              {/* 加载更多触发器（不可见） */}
+              {hasMore && <div ref={loadMoreRef} className="h-1" />}
+
+              {/* 到底了提示 */}
+              {!hasMore && keys.length > 0 && (
+                <div ref={loadMoreRef} className={cn(
+                  "text-center py-4 text-xs text-muted-foreground transition-all duration-300",
+                  isAtBottom && "scale-110 text-primary font-medium"
+                )}>
+                  {isAtBottom ? (
+                    <div className="flex items-center justify-center gap-2">
+                      <span>🎉</span>
+                      <span>已经到底了，共 {keys.length} 个 keys</span>
+                      <span>🎉</span>
+                    </div>
+                  ) : (
+                    <span>已加载 {keys.length} 个 keys</span>
+                  )}
+                </div>
+              )}
+            </>
+            )}
+            </>
+            )}
           </div>
         </ScrollArea>
       </div>
 
-      <div className="flex-1 p-4">
+      <div className="flex-1 p-4 overflow-hidden">
         {selectedKey ? (
           <div className="h-full">
             <div className="mb-4">
@@ -1149,8 +1739,20 @@ export function RedisBrowser({ connectionId }: RedisBrowserProps) {
                 类型: {selectedKey.type}
               </p>
             </div>
-            <div className="border rounded-lg p-4">
-              {renderValueEditor()}
+            <div className="border rounded-lg p-4 min-h-[200px]">
+              {loadingKeyDetail ? (
+                <div className="flex flex-col items-center justify-center py-12 space-y-4">
+                  <RefreshCw className="h-8 w-8 animate-spin text-primary" />
+                  <div className="text-center space-y-2">
+                    <p className="text-sm font-medium text-muted-foreground">加载中...</p>
+                    <p className="text-xs text-muted-foreground opacity-60">正在从 Redis 获取数据</p>
+                  </div>
+                </div>
+              ) : (
+                <div className="animate-in fade-in slide-in-from-bottom-4 duration-300">
+                  {renderValueEditor()}
+                </div>
+              )}
             </div>
           </div>
         ) : (
@@ -1412,6 +2014,146 @@ export function RedisBrowser({ connectionId }: RedisBrowserProps) {
                   确定
                 </Button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 慢查询日志对话框 */}
+      {showSlowlogDialog && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-background rounded-lg p-6 w-[800px] max-w-[90vw] max-h-[80vh] flex flex-col">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold">慢查询日志</h3>
+              <Button variant="ghost" size="icon" onClick={() => setShowSlowlogDialog(false)}>
+                ✕
+              </Button>
+            </div>
+            <div className="flex-1 overflow-auto">
+              {loadingSlowlog ? (
+                <div className="flex items-center justify-center py-8">
+                  <RefreshCw className="h-5 w-5 animate-spin text-primary" />
+                </div>
+              ) : slowlogData.length === 0 ? (
+                <div className="text-center py-8 text-sm text-muted-foreground">
+                  没有慢查询日志
+                </div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-1/6">ID</TableHead>
+                      <TableHead className="w-1/6">时间</TableHead>
+                      <TableHead className="w-1/6">耗时 (微秒)</TableHead>
+                      <TableHead className="w-1/2">命令</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {slowlogData.map((log: any, index: number) => (
+                      <TableRow key={index}>
+                        <TableCell className="font-mono">{log[0]}</TableCell>
+                        <TableCell>
+                          {new Date(log[1] * 1000).toLocaleString('zh-CN')}
+                        </TableCell>
+                        <TableCell className={cn(
+                          "font-mono",
+                          log[2] > 10000 ? "text-destructive" : log[2] > 1000 ? "text-orange-500" : ""
+                        )}>
+                          {log[2]} μs
+                        </TableCell>
+                        <TableCell className="font-mono text-xs break-all">
+                          {Array.isArray(log[3]) ? log[3].join(' ') : log[3]}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </div>
+            <div className="mt-4 text-xs text-muted-foreground">
+              提示：红色表示耗时超过 10ms，橙色表示耗时超过 1ms
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 客户端连接管理对话框 */}
+      {showClientsDialog && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-background rounded-lg p-6 w-[900px] max-w-[90vw] max-h-[80vh] flex flex-col">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold">客户端连接管理 ({clientsData.length} 个连接)</h3>
+              <Button variant="ghost" size="icon" onClick={() => setShowClientsDialog(false)}>
+                ✕
+              </Button>
+            </div>
+            <div className="flex-1 overflow-auto">
+              {loadingClients ? (
+                <div className="flex items-center justify-center py-8">
+                  <RefreshCw className="h-5 w-5 animate-spin text-primary" />
+                </div>
+              ) : clientsData.length === 0 ? (
+                <div className="text-center py-8 text-sm text-muted-foreground">
+                  没有客户端连接
+                </div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-1/6">ID</TableHead>
+                      <TableHead className="w-1/5">地址</TableHead>
+                      <TableHead className="w-1/6">连接时长</TableHead>
+                      <TableHead className="w-1/6">空闲时长</TableHead>
+                      <TableHead className="w-1/6">数据库</TableHead>
+                      <TableHead className="w-1/6">状态</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {clientsData.map((client: any, index: number) => (
+                      <TableRow key={index}>
+                        <TableCell className="font-mono">{client.id}</TableCell>
+                        <TableCell className="font-mono">
+                          {client.addr}
+                        </TableCell>
+                        <TableCell>
+                          {formatDuration(parseInt(client.age) || 0)}
+                        </TableCell>
+                        <TableCell>
+                          {formatDuration(parseInt(client.idle) || 0)}
+                        </TableCell>
+                        <TableCell>
+                          DB{client.db}
+                        </TableCell>
+                        <TableCell>
+                          <span className={cn(
+                            "px-2 py-1 rounded text-xs",
+                            client.name === "master" ? "bg-green-100 text-green-800" : "bg-blue-100 text-blue-800"
+                          )}>
+                            {client.name || "客户端"}
+                          </span>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 实时监控对话框 */}
+      {showMonitorDialog && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-background rounded-lg w-full max-w-[1200px] h-[85vh] flex flex-col overflow-hidden">
+            <div className="flex items-center justify-between p-4 border-b shrink-0">
+              <h3 className="text-lg font-semibold">Redis 实时监控</h3>
+              <Button variant="ghost" size="icon" onClick={() => setShowMonitorDialog(false)}>
+                ✕
+              </Button>
+            </div>
+            <div className="flex-1 overflow-auto">
+              <DatabaseMonitorPanel connectionId={connectionId || ''} databaseType="redis" />
             </div>
           </div>
         </div>

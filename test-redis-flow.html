@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Redis Flow Test</title>
+</head>
+<body>
+    <h1>Redis 数据流测试</h1>
+    <div id="output"></div>
+
+    <script>
+        const output = document.getElementById('output');
+
+        function log(message) {
+            output.innerHTML += `<div>${message}</div>`;
+            console.log(message);
+        }
+
+        // 测试 JSON 序列化和反序列化
+        function testJsonFlow() {
+            log('=== 测试 JSON 数据流 ===');
+
+            // 模拟后端响应
+            const keys = ['key1', 'key2', 'key3'];
+            const backendResponse = {
+                keys: keys,
+                cursor: 100,
+                has_more: true
+            };
+
+            log(`后端响应: ${JSON.stringify(backendResponse)}`);
+
+            // 序列化（模拟 serde_json::to_string）
+            const jsonStr = JSON.stringify(backendResponse);
+            log(`序列化后的字符串: ${jsonStr}`);
+            log(`字符串长度: ${jsonStr.length}`);
+
+            // 反序列化（模拟前端 invoke）
+            const parsedResponse = JSON.parse(jsonStr);
+            log(`反序列化后的对象: ${JSON.stringify(parsedResponse)}`);
+
+            // 检查结构
+            log(`parsedResponse 类型: ${typeof parsedResponse}`);
+            log(`parsedResponse.keys: ${parsedResponse.keys}`);
+            log(`parsedResponse.keys 类型: ${typeof parsedResponse.keys}`);
+            log(`Array.isArray(parsedResponse.keys): ${Array.isArray(parsedResponse.keys)}`);
+
+            // 尝试访问 length
+            try {
+                const length = parsedResponse.keys.length;
+                log(`✓ 成功获取 keys.length: ${length}`);
+            } catch (e) {
+                log(`✗ 获取 keys.length 失败: ${e.message}`);
+            }
+
+            // 测试边界情况
+            log('\n=== 测试边界情况 ===');
+
+            // 测试 undefined
+            const undefinedResponse = { keys: undefined };
+            log(`测试 undefined: ${JSON.stringify(undefinedResponse)}`);
+            try {
+                const length = undefinedResponse.keys.length;
+                log(`✗ 不应该到这里: ${length}`);
+            } catch (e) {
+                log(`✓ 正确捕获错误: ${e.message}`);
+            }
+
+            // 测试 null
+            const nullResponse = { keys: null };
+            log(`测试 null: ${JSON.stringify(nullResponse)}`);
+            try {
+                const length = nullResponse.keys.length;
+                log(`✗ 不应该到这里: ${length}`);
+            } catch (e) {
+                log(`✓ 正确捕获错误: ${e.message}`);
+            }
+
+            // 测试字符串
+            const stringResponse = { keys: "not an array" };
+            log(`测试字符串: ${JSON.stringify(stringResponse)}`);
+            try {
+                const length = stringResponse.keys.length;
+                log(`字符串有 length: ${length}`);
+            } catch (e) {
+                log(`✗ 意外错误: ${e.message}`);
+            }
+        }
+
+        // 测试 Tauri invoke 模拟
+        function testTauriInvoke() {
+            log('\n=== 测试 Tauri Invoke 模拟 ===');
+
+            // 模拟后端返回的字符串
+            const jsonString = '{"keys":["key1","key2","key3"],"cursor":100,"has_more":true}';
+            log(`模拟后端返回的字符串: ${jsonString}`);
+
+            // 模拟前端 invoke
+            try {
+                const response = JSON.parse(jsonString);
+                log(`✓ 前端解析成功: ${JSON.stringify(response)}`);
+
+                if (Array.isArray(response.keys)) {
+                    log(`✓ response.keys 是数组，长度: ${response.keys.length}`);
+                } else {
+                    log(`✗ response.keys 不是数组，类型: ${typeof response.keys}`);
+                }
+            } catch (e) {
+                log(`✗ 前端解析失败: ${e.message}`);
+            }
+        }
+
+        // 运行测试
+        testJsonFlow();
+        testTauriInvoke();
+    </script>
+</body>
+</html>

@@ -9,6 +9,11 @@ export interface MySQLAdvancedOptions {
   defaultSortField?: string;
 }
 
+export interface RedisAdvancedOptions {
+  databaseCount: number;
+  keyPageSize: number;
+}
+
 export interface ConnectionConfig {
   mysql?: {
     host: string;
@@ -21,8 +26,10 @@ export interface ConnectionConfig {
   redis?: {
     host: string;
     port: number;
+    username?: string;
     password?: string;
     database?: number;
+    advancedOptions?: RedisAdvancedOptions;
   };
   mongodb?: {
     host: string;
