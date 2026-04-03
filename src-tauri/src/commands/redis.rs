@@ -106,8 +106,6 @@ pub async fn get_redis_keys(
         .get_mut(&conn_id)
         .ok_or_else(|| format!("Connection ID '{}' does not exist", conn_id))?;
 
-    eprintln!("Getting Redis keys with pattern: {}, limit: {:?}, cursor: {:?}", pattern, limit, cursor);
-
     let limit = limit.unwrap_or(100);
     let cursor = cursor.unwrap_or(0);
 
@@ -120,7 +118,6 @@ pub async fn get_redis_keys(
         .arg(limit * 2) // 获取更多以确保有足够的结果
         .query(conn)
         .map_err(|e| {
-            eprintln!("Failed to scan keys: {}", e);
             format!("Failed to scan keys: {}", e)
         })?;
 
@@ -130,8 +127,6 @@ pub async fn get_redis_keys(
     if keys.len() > limit {
         keys.truncate(limit);
     }
-
-    eprintln!("Found {} keys, next cursor: {}", keys.len(), next_cursor);
 
     let response = json!({
         "keys": keys,
@@ -151,8 +146,6 @@ pub async fn get_redis_value(conn_id: String, key: String) -> Result<String, Str
         .get_mut(&conn_id)
         .ok_or_else(|| format!("Connection ID '{}' does not exist", conn_id))?;
 
-    eprintln!("Getting value for key: {}", key);
-
     let key_type: String = redis::cmd("TYPE")
         .arg(&key)
         .query(conn)
@@ -166,7 +159,6 @@ pub async fn get_redis_value(conn_id: String, key: String) -> Result<String, Str
         "string" => {
             let value: String = conn.get(&key)
                 .map_err(|e| {
-                    eprintln!("Failed to get string value for key {}: {}", key, e);
                     format!("Failed to get value: {}", e)
                 })?;
             json!({ "type": "string", "value": value })
@@ -174,43 +166,32 @@ pub async fn get_redis_value(conn_id: String, key: String) -> Result<String, Str
         "hash" => {
             let value: HashMap<String, String> = conn.hgetall(&key)
                 .map_err(|e| {
-                    eprintln!("Failed to get hash value for key {}: {}", key, e);
                     format!("Failed to get hash: {}", e)
                 })?;
             json!({ "type": "hash", "value": value })
         }
         "list" => {
-            eprintln!("Getting list value for key: {}", key);
             let value: Vec<String> = conn.lrange(&key, 0, -1)
                 .map_err(|e| {
-                    eprintln!("Failed to get list value for key {}: {}", key, e);
                     format!("Failed to get list: {}", e)
                 })?;
-            eprintln!("List elements count: {}", value.len());
             json!({ "type": "list", "value": value })
         }
         "set" => {
-            eprintln!("Getting set value for key: {}", key);
             let value: Vec<String> = conn.smembers(&key)
                 .map_err(|e| {
-                    eprintln!("Failed to get set value for key {}: {}", key, e);
                     format!("Failed to get set: {}", e)
                 })?;
-            eprintln!("Set members count: {}", value.len());
             json!({ "type": "set", "value": value })
         }
         "zset" => {
-            eprintln!("Getting zset value for key: {}", key);
             let value: Vec<(String, i64)> = conn.zrange_withscores(&key, 0, -1)
                 .map_err(|e| {
-                    eprintln!("Failed to get zset value for key {}: {}", key, e);
                     format!("Failed to get zset: {}", e)
                 })?;
-            eprintln!("ZSet members count: {}", value.len());
             json!({ "type": "zset", "value": value })
         }
         _ => {
-            eprintln!("Unknown key type: {}", key_type);
             json!({ "type": key_type, "value": null })
         }
     };
@@ -227,13 +208,10 @@ pub async fn get_redis_key_type(conn_id: String, key: String) -> Result<String, 
         .get_mut(&conn_id)
         .ok_or_else(|| format!("Connection ID '{}' does not exist", conn_id))?;
 
-    eprintln!("Getting type for key: {}", key);
-
     let key_type: String = redis::cmd("TYPE")
         .arg(&key)
         .query(conn)
         .map_err(|e| {
-            eprintln!("Failed to get type for key {}: {}", key, e);
             format!("Failed to get type: {}", e)
         })?;
 
@@ -703,11 +681,24 @@ pub async fn execute_redis_command(
         redis_cmd.arg(arg);
     }
 
+    // 记录开始时间
+    let start_time = std::time::Instant::now();
+
     let result: String = redis_cmd
         .query(conn)
         .map_err(|e| format!("Failed to execute command: {}", e))?;
 
-    Ok(result)
+    // 计算耗时（毫秒）
+    let duration_ms = start_time.elapsed().as_millis() as u64;
+
+    // 返回包含结果和耗时的 JSON
+    let response = json!({
+        "result": result,
+        "duration_ms": duration_ms
+    });
+
+    serde_json::to_string(&response)
+        .map_err(|e| format!("Serialization failed: {}", e))
 }
 
 #[tauri::command]
@@ -759,16 +750,18 @@ pub async fn get_redis_info(conn_id: String) -> Result<String, String> {
 }
 
 #[tauri::command]
-pub async fn get_redis_slowlog(conn_id: String) -> Result<String, String> {
+pub async fn get_redis_slowlog(conn_id: String, limit: Option<i64>) -> Result<String, String> {
     let mut connections = CONNECTIONS.lock().await;
 
     let conn = connections
         .get_mut(&conn_id)
         .ok_or_else(|| format!("Connection ID '{}' does not exist", conn_id))?;
 
+    let limit = limit.unwrap_or(100);
+
     let logs: Vec<redis::Value> = redis::cmd("SLOWLOG")
         .arg("GET")
-        .arg(10)
+        .arg(limit)
         .query(conn)
         .map_err(|e| format!("Failed to get slowlog: {}", e))?;
 
@@ -1601,6 +1594,71 @@ fn set_redis_value_internal(
 }
 
 #[tauri::command]
+pub async fn search_redis_keys_exact(
+    conn_id: String,
+    pattern: String,
+    key_type: Option<String>,
+) -> Result<String, String> {
+    let mut connections = CONNECTIONS.lock().await;
+
+    let conn = connections
+        .get_mut(&conn_id)
+        .ok_or_else(|| {
+            format!("Connection ID '{}' does not exist", conn_id)
+        })?;
+
+    // 使用 KEYS 命令精确搜索（注意：大量 key 时性能较差）
+    let keys: Vec<String> = redis::cmd("KEYS")
+        .arg(&pattern)
+        .query(conn)
+        .map_err(|e| {
+            format!("Failed to search keys: {}", e)
+        })?;
+
+    // 如果指定了类型过滤，则过滤类型
+    let filtered_keys: Vec<String> = match key_type {
+        Some(ref filter_type) if !filter_type.is_empty() => {
+            // 使用 Pipeline 批量获取类型
+            let mut pipe = redis::pipe();
+            for key in keys.iter().take(1000) { // 限制最多处理 1000 个 keys
+                pipe.cmd("TYPE").arg(key);
+            }
+
+            let results: Vec<String> = pipe
+                .query(conn)
+                .map_err(|e| {
+                    format!("Failed to execute pipeline TYPE commands: {}", e)
+                })?;
+
+            let matching_keys: Vec<String> = keys.iter()
+                .take(1000) // 限制最多处理 1000 个 keys
+                .zip(results.iter())
+                .filter_map(|(key, ktype)| {
+                    if ktype == filter_type {
+                        Some(key.clone())
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+
+            matching_keys
+        }
+        _ => keys.iter().take(1000).cloned().collect(), // 限制最多返回 1000 个 keys
+    };
+
+    let response = json!({
+        "keys": filtered_keys,
+        "total_matched": keys.len()
+    });
+
+    serde_json::to_string(&response)
+        .map_err(|e| {
+            format!("Serialization failed: {}", e)
+        })
+}
+
+#[tauri::command]
 pub async fn get_redis_keys_by_type(
     conn_id: String,
     pattern: String,
@@ -1608,124 +1666,141 @@ pub async fn get_redis_keys_by_type(
     limit: Option<usize>,
     cursor: Option<usize>,
 ) -> Result<String, String> {
-    eprintln!("=== get_redis_keys_by_type called ===");
-    eprintln!("conn_id: {}", conn_id);
-    eprintln!("pattern: {}", pattern);
-    eprintln!("key_type: {:?}", key_type);
-    eprintln!("limit: {:?}", limit);
-    eprintln!("cursor: {:?}", cursor);
-
     let mut connections = CONNECTIONS.lock().await;
 
     let conn = connections
         .get_mut(&conn_id)
         .ok_or_else(|| {
-            eprintln!("Connection ID '{}' does not exist", conn_id);
             format!("Connection ID '{}' does not exist", conn_id)
         })?;
-
-    eprintln!("Got connection successfully");
 
     let limit = limit.unwrap_or(100);
     let cursor = cursor.unwrap_or(0);
 
-    // 使用 SCAN 命令获取 keys
-    eprintln!("Executing SCAN command...");
-    let result: (usize, Vec<String>) = redis::cmd("SCAN")
-        .arg(cursor)
-        .arg("MATCH")
-        .arg(&pattern)
-        .arg("COUNT")
-        .arg(limit * 2) // 获取更多以确保有足够的结果
-        .query(conn)
-        .map_err(|e| {
-            eprintln!("Failed to scan keys: {}", e);
-            format!("Failed to scan keys: {}", e)
-        })?;
+    // 判断是否需要完整扫描（有搜索或类型筛选）
+    let need_full_scan = pattern != "*" || key_type.as_ref().map(|t| !t.is_empty()).unwrap_or(false);
 
-    let (next_cursor, keys) = result;
+    let (next_cursor, keys) = if need_full_scan {
+        // 完整 SCAN 扫描，获取所有匹配的 keys
+        let mut all_keys: Vec<String> = Vec::new();
+        let mut scan_cursor = 0;
 
-    eprintln!("Found {} keys, next cursor: {}", keys.len(), next_cursor);
+        loop {
+            let result: (usize, Vec<String>) = redis::cmd("SCAN")
+                .arg(scan_cursor)
+                .arg("MATCH")
+                .arg(&pattern)
+                .arg("COUNT")
+                .arg(1000)
+                .query(conn)
+                .map_err(|e| {
+                    format!("Failed to scan keys: {}", e)
+                })?;
 
-    // 如果指定了类型过滤，则使用 Pipeline 批量获取每个 key 的类型并进行过滤
-    let filtered_keys = if let Some(ref filter_type) = key_type {
-        if !filter_type.is_empty() {
-            eprintln!("Filtering by type: {}", filter_type);
-            
+            let (next, batch_keys) = result;
+
+            all_keys.extend(batch_keys);
+
+            scan_cursor = next;
+            if scan_cursor == 0 {
+                break;  // 扫描完成
+            }
+        }
+
+        (0, all_keys)  // cursor 设为 0 表示完整扫描
+    } else {
+        // 分页 SCAN，只获取一批 keys
+        let result: (usize, Vec<String>) = redis::cmd("SCAN")
+            .arg(cursor)
+            .arg("MATCH")
+            .arg(&pattern)
+            .arg("COUNT")
+            .arg(limit * 2) // 获取更多以确保有足够的结果
+            .query(conn)
+            .map_err(|e| {
+                format!("Failed to scan keys: {}", e)
+            })?;
+
+        result
+    };
+
+    // 如果指定了类型过滤，则批量获取每个 key 的类型并进行过滤
+    let filtered_keys: Vec<String> = match key_type {
+        Some(ref filter_type) if !filter_type.is_empty() => {
             // 使用 Pipeline 批量获取类型（性能优化：减少网络往返）
             let mut pipe = redis::pipe();
             for key in &keys {
                 pipe.cmd("TYPE").arg(key);
             }
-            
-            // 一次性执行所有 TYPE 命令
-            let results: Vec<redis::Value> = pipe
+
+            // 一次性执行所有 TYPE 命令，返回 Vec<String>
+            let results: Vec<String> = pipe
                 .query(conn)
                 .map_err(|e| {
-                    eprintln!("Failed to execute pipeline TYPE commands: {}", e);
                     format!("Failed to execute pipeline TYPE commands: {}", e)
                 })?;
 
-            // 解析结果
-            let mut matching_keys = Vec::new();
-            let mut type_keys: Vec<(String, String)> = Vec::new();
-            
-            for (index, (key, result)) in keys.iter().zip(results.iter()).enumerate() {
-                match result {
-                    redis::Value::BulkString(bytes) => {
-                        if let Ok(ktype_str) = std::str::from_utf8(bytes) {
-                            let ktype = ktype_str.to_string();
-                            type_keys.push((key.clone(), ktype.clone()));
-                            
-                            // 立即过滤匹配的类型
-                            if ktype == *filter_type {
-                                matching_keys.push(key.clone());
-                            }
-                        }
+            // 过滤匹配的类型
+            let matching_keys: Vec<String> = keys.iter()
+                .zip(results.iter())
+                .filter_map(|(key, ktype)| {
+                    if ktype == filter_type {
+                        Some(key.clone())
+                    } else {
+                        None
                     }
-                    redis::Value::SimpleString(ktype_str) => {
-                        type_keys.push((key.clone(), ktype_str.clone()));
-                        
-                        if ktype_str.as_str() == filter_type {
-                            matching_keys.push(key.clone());
-                        }
-                    }
-                    _ => {
-                        eprintln!("Key {}: {} - Unexpected result type: {:?}", index, key, result);
-                    }
-                }
-            }
+                })
+                .collect();
 
-            eprintln!("Got types for {} keys, found {} matching", type_keys.len(), matching_keys.len());
             matching_keys
-        } else {
-            eprintln!("Filter type is empty, returning all keys");
-            keys
         }
-    } else {
-        eprintln!("No filter type specified, returning all keys");
-        keys
+        Some(_) => {
+            keys.clone()
+        }
+        None => {
+            keys.clone()
+        }
     };
 
     // 限制返回的数量
     let filtered_count = filtered_keys.len();
-    let result_keys = if filtered_count > limit {
-        filtered_keys[..limit].to_vec()
+    let result_keys = if need_full_scan {
+        // 完整扫描时，最多返回 1000 个 keys（避免太多数据导致卡死）
+        let max_result = 1000;
+        if filtered_count > max_result {
+            filtered_keys[..max_result].to_vec()
+        } else {
+            filtered_keys
+        }
     } else {
-        filtered_keys
+        // 分页扫描时，返回 limit 个 keys
+        if filtered_count > limit {
+            filtered_keys[..limit].to_vec()
+        } else {
+            filtered_keys
+        }
     };
 
-
-    let response = json!({
-        "keys": result_keys,
-        "cursor": next_cursor,
-        "has_more": next_cursor != 0 || filtered_count > limit
-    });
+    let response = if need_full_scan {
+        // 完整扫描：一次性返回所有结果
+        json!({
+            "keys": result_keys,
+            "cursor": 0,
+            "has_more": false,
+            "total_matched": filtered_count
+        })
+    } else {
+        // 分页扫描：返回分页信息
+        json!({
+            "keys": result_keys,
+            "cursor": next_cursor,
+            "has_more": next_cursor != 0 || filtered_count > limit
+        })
+    };
 
 
     serde_json::to_string(&response)
         .map_err(|e| {
-            eprintln!("Serialization failed: {}", e);
             format!("Serialization failed: {}", e)
         })
 }

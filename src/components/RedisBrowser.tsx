@@ -1,6 +1,98 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { Search, Plus, Trash2, RefreshCw, Clock, Terminal, Download, Edit2, Activity } from 'lucide-react';
+import { Search, Plus, Trash2, RefreshCw, Clock, Terminal, Download, Edit2, Activity, X, ChevronDown } from 'lucide-react';
+
+// Redis 常用命令列表，用于命令提示
+const REDIS_COMMANDS = [
+  // String 操作
+  { name: 'SET', description: '设置键值' },
+  { name: 'GET', description: '获取键值' },
+  { name: 'SETNX', description: '当键不存在时设置值' },
+  { name: 'SETEX', description: '设置键值并指定过期时间' },
+  { name: 'GETSET', description: '获取旧值并设置新值' },
+  { name: 'MGET', description: '批量获取多个键的值' },
+  { name: 'MSET', description: '批量设置多个键值对' },
+  { name: 'INCR', description: '将键值加一' },
+  { name: 'DECR', description: '将键值减一' },
+  { name: 'INCRBY', description: '将键值增加指定数值' },
+  { name: 'DECRBY', description: '将键值减少指定数值' },
+  { name: 'APPEND', description: '追加值到字符串末尾' },
+  { name: 'STRLEN', description: '获取字符串长度' },
+  
+  // Hash 操作
+  { name: 'HSET', description: '设置哈希字段' },
+  { name: 'HGET', description: '获取哈希字段值' },
+  { name: 'HGETALL', description: '获取所有哈希字段和值' },
+  { name: 'HDEL', description: '删除哈希字段' },
+  { name: 'HEXISTS', description: '检查哈希字段是否存在' },
+  { name: 'HKEYS', description: '获取所有哈希字段名' },
+  { name: 'HVALS', description: '获取所有哈希值' },
+  { name: 'HLEN', description: '获取哈希字段数量' },
+  { name: 'HINCRBY', description: '增加哈希字段的数值' },
+  { name: 'HMGET', description: '批量获取哈希字段值' },
+  { name: 'HMSET', description: '批量设置哈希字段值' },
+  
+  // List 操作
+  { name: 'LPUSH', description: '从列表左侧推入元素' },
+  { name: 'RPUSH', description: '从列表右侧推入元素' },
+  { name: 'LPOP', description: '从列表左侧弹出元素' },
+  { name: 'RPOP', description: '从列表右侧弹出元素' },
+  { name: 'LLEN', description: '获取列表长度' },
+  { name: 'LINDEX', description: '获取列表指定索引的元素' },
+  { name: 'LRANGE', description: '获取列表指定范围的元素' },
+  { name: 'LSET', description: '设置列表指定索引的元素' },
+  { name: 'LREM', description: '删除列表中指定值的元素' },
+  { name: 'LTRIM', description: '修剪列表，只保留指定范围' },
+  
+  // Set 操作
+  { name: 'SADD', description: '向集合添加成员' },
+  { name: 'SREM', description: '从集合移除成员' },
+  { name: 'SISMEMBER', description: '检查成员是否在集合中' },
+  { name: 'SMEMBERS', description: '获取集合所有成员' },
+  { name: 'SCARD', description: '获取集合成员数量' },
+  { name: 'SPOP', description: '随机弹出集合成员' },
+  { name: 'SRANDMEMBER', description: '随机获取集合成员' },
+  { name: 'SINTER', description: '获取多个集合的交集' },
+  { name: 'SUNION', description: '获取多个集合的并集' },
+  { name: 'SDIFF', description: '获取多个集合的差集' },
+  
+  // ZSet 操作
+  { name: 'ZADD', description: '向有序集合添加成员' },
+  { name: 'ZREM', description: '从有序集合移除成员' },
+  { name: 'ZSCORE', description: '获取有序集合成员的分数' },
+  { name: 'ZRANGE', description: '获取有序集合指定范围的成员' },
+  { name: 'ZREVRANGE', description: '获取有序集合指定范围的成员（降序）' },
+  { name: 'ZRANK', description: '获取成员在有序集合中的排名' },
+  { name: 'ZREVRANK', description: '获取成员在有序集合中的排名（降序）' },
+  { name: 'ZCARD', description: '获取有序集合成员数量' },
+  { name: 'ZCOUNT', description: '获取分数范围内的成员数量' },
+  { name: 'ZINCRBY', description: '增加有序集合成员的分数' },
+  
+  // Key 操作
+  { name: 'KEYS', description: '查找匹配模式的键' },
+  { name: 'EXISTS', description: '检查键是否存在' },
+  { name: 'DEL', description: '删除键' },
+  { name: 'EXPIRE', description: '设置键的过期时间' },
+  { name: 'TTL', description: '获取键的剩余过期时间' },
+  { name: 'RENAME', description: '重命名键' },
+  { name: 'TYPE', description: '获取键的类型' },
+  { name: 'DUMP', description: '序列化键的值' },
+  { name: 'RESTORE', description: '反序列化值并存储到键' },
+  { name: 'SCAN', description: '增量迭代键空间' },
+  
+  // 服务器操作
+  { name: 'INFO', description: '获取服务器信息和统计' },
+  { name: 'DBSIZE', description: '获取当前数据库的键数量' },
+  { name: 'FLUSHDB', description: '清空当前数据库' },
+  { name: 'FLUSHALL', description: '清空所有数据库' },
+  { name: 'SELECT', description: '切换数据库' },
+  { name: 'PING', description: '测试服务器连接' },
+  { name: 'ECHO', description: '回显字符串' },
+  { name: 'CONFIG', description: '获取或设置配置参数' },
+  { name: 'SLOWLOG', description: '管理慢查询日志' },
+  { name: 'CLIENT', description: '管理客户端连接' },
+  { name: 'MONITOR', description: '实时监控所有命令' },
+];
 import { Button } from './ui/button';
 import { Checkbox } from './ui/checkbox';
 import { Input } from './ui/input';
@@ -64,16 +156,35 @@ export function RedisBrowser({ connectionId }: RedisBrowserProps) {
   const [newTtl, setNewTtl] = useState('');
 
   // 分页和加载更多
-  const [cursor, setCursor] = useState(0);
-  const [hasMore, setHasMore] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [isAtBottom, setIsAtBottom] = useState(false);
-  const loadMoreRef = useRef<HTMLDivElement>(null);
+    const [cursor, setCursor] = useState(0);
+    const [hasMore, setHasMore] = useState(true);
+    const [loadingMore, setLoadingMore] = useState(false);
+    const [isAtBottom, setIsAtBottom] = useState(false);
+    const loadMoreRef = useRef<HTMLDivElement>(null);
   
-  // 新增 UI 功能状态
-  const [showCommandDialog, setShowCommandDialog] = useState(false);
+    // 搜索统计信息
+    const [searchStats, setSearchStats] = useState<{
+      total: number | null;
+      displayed: number;
+      scanning: boolean;
+    }>({
+      total: null,
+      displayed: 0,
+      scanning: false,
+    });
+  
+    // 新增 UI 功能状态
+  const [showCommandInputPanel, setShowCommandInputPanel] = useState(false);
   const [commandInput, setCommandInput] = useState('');
   const [commandOutput, setCommandOutput] = useState('');
+  const [commandDuration, setCommandDuration] = useState<number | null>(null);
+  const [showCommandJsonFormatted, setShowCommandJsonFormatted] = useState(false);
+  
+  // 命令提示相关状态
+  const [showCommandSuggestions, setShowCommandSuggestions] = useState(false);
+  const [filteredCommands, setFilteredCommands] = useState(REDIS_COMMANDS);
+  const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(-1);
+  const commandInputRef = useRef<HTMLInputElement>(null);
   const [showRenameDialog, setShowRenameDialog] = useState(false);
   const [renameOldKey, setRenameOldKey] = useState('');
   const [renameNewKey, setRenameNewKey] = useState('');
@@ -111,6 +222,26 @@ export function RedisBrowser({ connectionId }: RedisBrowserProps) {
   // 防止快速点击的 ref
   const isLoadingRef = useRef(false);
 
+  // 命令过滤函数
+  const filterCommands = useCallback((input: string) => {
+    if (!input.trim()) {
+      setFilteredCommands(REDIS_COMMANDS);
+      setShowCommandSuggestions(false);
+      return;
+    }
+
+    const inputUpper = input.toUpperCase().trim();
+    const filtered = REDIS_COMMANDS.filter(cmd => 
+      cmd.name.startsWith(inputUpper) || 
+      cmd.name.includes(inputUpper) ||
+      cmd.description.toUpperCase().includes(inputUpper)
+    );
+    
+    setFilteredCommands(filtered);
+    setShowCommandSuggestions(filtered.length > 0);
+    setSelectedSuggestionIndex(-1);
+  }, []);
+
   // Hash 和 ZSet 分页状态
   const [hashPagination, setHashPagination] = useState({ offset: 0, limit: 50, hasMore: true, total: 0 });
   const [zsetPagination, setZsetPagination] = useState({ offset: 0, limit: 50, hasMore: true, total: 0 });
@@ -121,9 +252,11 @@ export function RedisBrowser({ connectionId }: RedisBrowserProps) {
 
   // 搜索防抖状态
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
+  const searchDebounceRef = useRef<NodeJS.Timeout | null>(null);
 
   // 类型筛选状态
   const [selectedType, setSelectedType] = useState<string>('all');
+  const [useExactSearch, setUseExactSearch] = useState(false); // 精确搜索模式
   const typeOptions = [
     { value: 'all', label: '全部类型' },
     { value: 'string', label: 'String' },
@@ -164,26 +297,47 @@ export function RedisBrowser({ connectionId }: RedisBrowserProps) {
       return;
     }
 
+    // 判断是否需要完整扫描（有搜索或类型筛选）
+    const needFullScan = debouncedSearchQuery || selectedType !== 'all';
+
     if (reset) {
       setLoading(true);
       setCursor(0);
       setKeys([]);
+      setHasMore(true);
+      // 如果是完整扫描，设置扫描状态
+      if (needFullScan) {
+        setSearchStats({ scanning: true, total: null, displayed: 0 });
+      } else {
+        // 正常浏览模式，清空统计信息
+        setSearchStats({ scanning: false, total: null, displayed: 0 });
+      }
     } else {
       setLoadingMore(true);
     }
 
     try {
-      const pattern = debouncedSearchQuery || '*';
+      // 将用户输入转换为 glob 模式，例如 "p" → "*p*"
+      const pattern = debouncedSearchQuery ? `*${debouncedSearchQuery}*` : '*';
       const currentCursor = reset ? 0 : cursor;
       const typeFilter = selectedType === 'all' ? null : selectedType;
 
-      const response = await invoke('get_redis_keys_by_type', {
-        connId: connectionId,
-        pattern,
-        keyType: typeFilter,
-        limit: keyPageSize,
-        cursor: currentCursor,
-      });
+      // 如果使用精确搜索模式，直接使用输入内容作为 pattern（不添加通配符）
+      const exactPattern = useExactSearch && debouncedSearchQuery ? debouncedSearchQuery : pattern;
+
+      const response = useExactSearch && debouncedSearchQuery
+        ? await invoke('search_redis_keys_exact', {
+            connId: connectionId,
+            pattern: exactPattern,
+            keyType: typeFilter,
+          })
+        : await invoke('get_redis_keys_by_type', {
+            connId: connectionId,
+            pattern,
+            keyType: typeFilter,
+            limit: keyPageSize,
+            cursor: needFullScan ? 0 : currentCursor,  // 完整扫描时 cursor 不重要
+          });
 
       // 尝试解析为对象
       let parsedResponse;
@@ -218,47 +372,90 @@ export function RedisBrowser({ connectionId }: RedisBrowserProps) {
         memory_usage: 0,
       }));
 
-      if (reset) {
+      if (reset || needFullScan) {
         setKeys(keyDetails);
       } else {
         setKeys(prev => [...prev, ...keyDetails]);
       }
 
-      setCursor(parsedResponse.cursor);
-
-      // 如果返回空结果且不是重置操作，说明已经扫描完了所有匹配的 keys
-      if (parsedResponse.keys.length === 0 && !reset) {
+      // 如果是完整扫描，不需要分页
+      if (needFullScan) {
         setHasMore(false);
+        // 更新统计信息
+        setSearchStats({
+          total: parsedResponse.total_matched || keyDetails.length,
+          displayed: keyDetails.length,
+          scanning: false,
+        });
       } else {
-        setHasMore(parsedResponse.has_more);
+        // 分页模式
+        setCursor(parsedResponse.cursor);
+        if (parsedResponse.keys.length === 0 && !reset) {
+          setHasMore(false);
+        } else {
+          setHasMore(parsedResponse.has_more);
+        }
+        // 分页模式的统计信息在 useEffect 中更新
       }
     } catch (error) {
       alert(`加载 keys 失败: ${error}`);
+      setSearchStats(prev => ({ ...prev, scanning: false }));
     } finally {
       setLoading(false);
       setLoadingMore(false);
     }
   }, [connectionId, cursor, debouncedSearchQuery, keyPageSize, selectedType]);
 
-  // 搜索防抖
+  // 分页模式下更新统计信息
   useEffect(() => {
-    const timer = setTimeout(() => {
-      setDebouncedSearchQuery(searchQuery);
-    }, 500); // 500ms 防抖
+    const needFullScan = debouncedSearchQuery || selectedType !== 'all';
+    if (!needFullScan && !loading && !loadingMore) {
+      setSearchStats({
+        total: null,
+        displayed: keys.length,
+        scanning: false,
+      });
+    }
+  }, [keys.length, debouncedSearchQuery, selectedType, loading, loadingMore]);
 
-    return () => clearTimeout(timer);
+  // 当焦点消失时执行搜索
+  const handleSearchBlur = () => {
+    setIsSearchFocused(false);
+    setDebouncedSearchQuery(searchQuery);
+  };
+
+  // 搜索防抖：用户停止输入 1000ms 后自动触发搜索
+  useEffect(() => {
+    // 清除之前的定时器
+    if (searchDebounceRef.current) {
+      clearTimeout(searchDebounceRef.current);
+    }
+
+    // 设置新的定时器
+    searchDebounceRef.current = setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery);
+    }, 1000);
+
+    // 清理函数
+    return () => {
+      if (searchDebounceRef.current) {
+        clearTimeout(searchDebounceRef.current);
+      }
+    };
   }, [searchQuery]);
 
+  // 当防抖后的搜索查询或类型筛选改变时，重新加载（重置分页）
   useEffect(() => {
-    // 当防抖后的搜索查询或类型筛选改变时，重新加载（重置分页）
-    loadKeys(true);
+    if (connectionId) {
+      loadKeys(true);
+    }
   }, [connectionId, debouncedSearchQuery, selectedType]);
 
   // Hash 和 ZSet 滚动监听
   useEffect(() => {
     const handleScroll = (container: HTMLElement | null, pagination: any, setPagination: any, loadData: () => void) => {
       if (!container) return;
-      
+
       const observer = new IntersectionObserver(
         (entries) => {
           const target = entries[0];
@@ -268,13 +465,13 @@ export function RedisBrowser({ connectionId }: RedisBrowserProps) {
         },
         { root: container, rootMargin: '100px', threshold: 0.1 }
       );
-      
+
       const sentinel = container.querySelector('.scroll-sentinel');
       if (sentinel) observer.observe(sentinel);
-      
+
       return () => observer.disconnect();
     };
-    
+
     if (selectedKey?.type === 'hash' && hashScrollRef.current) {
       return handleScroll(hashScrollRef.current, hashPagination, setHashPagination, () => loadHashData(false));
     }
@@ -284,7 +481,8 @@ export function RedisBrowser({ connectionId }: RedisBrowserProps) {
   }, [hashPagination, zsetPagination, selectedKey]);
 
   const handleLoadMore = () => {
-    if (!loadingMore && hasMore) {
+    const needFullScan = debouncedSearchQuery || selectedType !== 'all';
+    if (!needFullScan && !loadingMore && hasMore) {
       loadKeys(false);
     }
   };
@@ -294,12 +492,18 @@ export function RedisBrowser({ connectionId }: RedisBrowserProps) {
     const observer = new IntersectionObserver(
       (entries) => {
         const target = entries[0];
-        if (target.isIntersecting && hasMore && !loadingMore) {
-          handleLoadMore();
+        const needFullScan = debouncedSearchQuery || selectedType !== 'all';
+
+        if (needFullScan) {
+          // 完整扫描模式，不需要加载更多
+          setIsAtBottom(true);
+        } else {
+          // 分页模式
+          if (target.isIntersecting && hasMore && !loadingMore) {
+            handleLoadMore();
+          }
+          setIsAtBottom(target.isIntersecting && !hasMore);
         }
-        
-        // 判断是否在底部
-        setIsAtBottom(target.isIntersecting && !hasMore);
       },
       {
         root: null,
@@ -318,20 +522,11 @@ export function RedisBrowser({ connectionId }: RedisBrowserProps) {
         observer.unobserve(currentRef);
       }
     };
-  }, [hasMore, loadingMore]);
-
-  // 搜索防抖
-  const handleSearchChange = (value: string) => {
-    setSearchQuery(value);
-  };
+  }, [hasMore, loadingMore, debouncedSearchQuery, selectedType]);
 
   useEffect(() => {
     loadDbInfo();
   }, [connectionId]);
-
-  const filteredKeys = keys.filter((k) =>
-    k.key.toLowerCase().includes(searchQuery.toLowerCase())
-  );
 
   const handleSelectKey = async (key: RedisKey) => {
     // 如果已经在加载，直接返回
@@ -478,7 +673,7 @@ export function RedisBrowser({ connectionId }: RedisBrowserProps) {
   };
 
   const handleRefresh = () => {
-    loadKeys();
+    loadKeys(true);
   };
 
   const handleAddKey = () => {
@@ -512,7 +707,6 @@ export function RedisBrowser({ connectionId }: RedisBrowserProps) {
         setHashPagination(prev => ({ ...prev, total: result.total, hasMore: result.has_more, offset: prev.offset + result.data.length }));
       }
     } catch (error) {
-      console.error('加载 hash 数据失败:', error);
     }
   };
 
@@ -543,7 +737,6 @@ export function RedisBrowser({ connectionId }: RedisBrowserProps) {
         setZsetPagination(prev => ({ ...prev, total: result.total, hasMore: result.has_more, offset: prev.offset + result.data.length }));
       }
     } catch (error) {
-      console.error('加载 zset 数据失败:', error);
     }
   };
 
@@ -614,14 +807,19 @@ export function RedisBrowser({ connectionId }: RedisBrowserProps) {
     }
 
     try {
-      const result = await invoke('execute_redis_command', {
+      const response = await invoke('execute_redis_command', {
         connId: connectionId,
         command: commandInput.trim(),
       }) as string;
 
-      setCommandOutput(result || 'OK');
+      // 解析返回的 JSON（包含 result 和 duration_ms）
+      const parsed = JSON.parse(response);
+      setCommandOutput(parsed.result || 'OK');
+      setCommandDuration(parsed.duration_ms || null);
+      setShowCommandJsonFormatted(false); // 重置格式化状态
     } catch (error) {
       setCommandOutput(`错误: ${error}`);
+      setCommandDuration(null);
     }
   };
 
@@ -659,6 +857,7 @@ export function RedisBrowser({ connectionId }: RedisBrowserProps) {
     try {
       const result = await invoke('get_redis_slowlog', {
         connId: connectionId,
+        limit: 100,
       }) as string;
 
       // 解析慢查询日志数据
@@ -1113,7 +1312,7 @@ export function RedisBrowser({ connectionId }: RedisBrowserProps) {
           const displayValue = showFormattedJSON && isJSON ? formatJSON(parsedJSON) : keyValue;
 
           return (
-            <div className="space-y-4">
+            <div className="space-y-6">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <Clock className="h-4 w-4" />
@@ -1133,13 +1332,13 @@ export function RedisBrowser({ connectionId }: RedisBrowserProps) {
                   </Button>
                 </div>
               </div>
-              <div className="space-y-2">
+              <div className="space-y-3">
                 <label className="text-sm font-medium">值</label>
                 {showFormattedJSON && isJSON ? (
                   <textarea
                     value={displayValue}
                     readOnly
-                    className="w-full min-h-[200px] p-3 text-sm border rounded-md resize-none font-mono bg-muted/30"
+                    className="w-full min-h-[200px] p-4 text-sm border rounded-md resize-none font-mono bg-muted/30"
                     spellCheck={false}
                   />
                 ) : (
@@ -1157,7 +1356,7 @@ export function RedisBrowser({ connectionId }: RedisBrowserProps) {
 
       case 'hash':
         return (
-          <div className="space-y-4">
+          <div className="space-y-6">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Clock className="h-4 w-4" />
@@ -1199,7 +1398,7 @@ export function RedisBrowser({ connectionId }: RedisBrowserProps) {
                           />
                         ) : (
                           <span 
-                            className="font-mono cursor-pointer hover:bg-muted px-1 rounded"
+                            className="font-mono cursor-pointer hover:bg-muted px-2 py-1 rounded"
                             onClick={() => setEditingHashIndex(index)}
                           >
                             {value}
@@ -1226,7 +1425,7 @@ export function RedisBrowser({ connectionId }: RedisBrowserProps) {
 
       case 'list':
         return (
-          <div className="space-y-4">
+          <div className="space-y-6">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Clock className="h-4 w-4" />
@@ -1252,9 +1451,9 @@ export function RedisBrowser({ connectionId }: RedisBrowserProps) {
                 </Button>
               </div>
             </div>
-            <div className="space-y-2">
+            <div className="space-y-3">
               {listData.map((item, index) => (
-                <div key={index} className="flex items-center gap-2 p-2 bg-muted rounded group">
+                <div key={index} className="flex items-center gap-2 p-3 bg-muted rounded group">
                   <span className="text-xs text-muted-foreground w-8 shrink-0">{index}</span>
                   {editingListIndex === index ? (
                     <Input
@@ -1270,7 +1469,7 @@ export function RedisBrowser({ connectionId }: RedisBrowserProps) {
                     />
                   ) : (
                     <span
-                      className="flex-1 font-mono cursor-pointer hover:bg-muted-foreground/10 px-1 rounded break-all"
+                      className="flex-1 font-mono cursor-pointer hover:bg-muted-foreground/10 px-2 py-1 rounded break-all"
                       onClick={() => setEditingListIndex(index)}
                       title={item}
                     >
@@ -1304,7 +1503,7 @@ export function RedisBrowser({ connectionId }: RedisBrowserProps) {
 
       case 'set':
         return (
-          <div className="space-y-4">
+          <div className="space-y-6">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Clock className="h-4 w-4" />
@@ -1320,9 +1519,9 @@ export function RedisBrowser({ connectionId }: RedisBrowserProps) {
                 </Button>
               </div>
             </div>
-            <div className="space-y-2">
+            <div className="space-y-3">
               {listData.map((item, index) => (
-                <div key={index} className="flex items-center gap-2 p-2 bg-muted rounded group">
+                <div key={index} className="flex items-center gap-2 p-3 bg-muted rounded group">
                   <span className="text-xs text-muted-foreground w-8 shrink-0">{index}</span>
                   <span className="flex-1 font-mono break-all" title={item}>
                     {item}
@@ -1344,7 +1543,7 @@ export function RedisBrowser({ connectionId }: RedisBrowserProps) {
 
       case 'zset':
         return (
-          <div className="space-y-4">
+          <div className="space-y-6">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Clock className="h-4 w-4" />
@@ -1442,13 +1641,13 @@ export function RedisBrowser({ connectionId }: RedisBrowserProps) {
     <div className="flex h-full">
       <div className="w-[300px] border-r flex flex-col sidebar-transition">
         {/* 数据库信息 */}
-        <div className="p-3 border-b bg-muted/30 transition-smooth">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-semibold transition-smooth">数据库</span>
+        <div className="p-4 border-b bg-muted/30 transition-smooth">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-sm font-semibold transition-smooth">数据库</span>
             <select
               value={dbIndex}
               onChange={(e) => handleSelectDb(parseInt(e.target.value))}
-              className="text-xs bg-background border rounded px-2 py-1 transition-all duration-200"
+              className="text-sm bg-background border rounded px-3 py-1.5 transition-all duration-200"
             >
               {Array.from({ length: databaseCount }, (_, i) => (
                 <option key={i} value={i}>
@@ -1457,7 +1656,7 @@ export function RedisBrowser({ connectionId }: RedisBrowserProps) {
               ))}
             </select>
           </div>
-          <div className="text-xs text-muted-foreground space-y-1 transition-all duration-200">
+          <div className="text-sm text-muted-foreground space-y-2 transition-all duration-200">
             <div className="flex justify-between">
               <span>Keys:</span>
               <span className="font-mono transition-opacity duration-200">
@@ -1480,19 +1679,72 @@ export function RedisBrowser({ connectionId }: RedisBrowserProps) {
         </div>
 
         {/* 搜索和操作工具栏 */}
-        <div className="p-3 border-b space-y-3 min-w-0">
+        <div className="p-4 border-b space-y-4 min-w-0">
           {/* 第一行：搜索和筛选 */}
-          <div className="flex gap-2 min-w-0">
+          <div className="flex gap-3 min-w-0">
             <div className="relative flex-1 min-w-0 transition-all duration-300 ease-in-out" style={{ flex: isSearchFocused ? '3' : '1' }}>
-              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground flex-shrink-0" />
+              <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground flex-shrink-0" />
               <Input
-                placeholder="搜索 keys (支持通配符 *)..."
+                placeholder={useExactSearch ? "精确搜索 (输入完整 key 名称)" : "搜索 keys (支持通配符 *)..."}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 onFocus={() => setIsSearchFocused(true)}
-                onBlur={() => setIsSearchFocused(false)}
-                className="pl-9 h-10"
+                onBlur={handleSearchBlur}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    // 清除防抖定时器，立即触发搜索
+                    if (searchDebounceRef.current) {
+                      clearTimeout(searchDebounceRef.current);
+                      searchDebounceRef.current = null;
+                    }
+                    setDebouncedSearchQuery(searchQuery);
+                    e.currentTarget.blur(); // 移除焦点
+                  }
+                }}
+                className="pl-10 pr-20 h-10"
               />
+              {(loading && searchQuery) && (
+                <div className="absolute right-20 top-2.5 h-4 w-4 text-muted-foreground">
+                  <RefreshCw className="h-4 w-4 animate-spin" />
+                </div>
+              )}
+              <Button
+                size="sm"
+                variant={useExactSearch ? "default" : "ghost"}
+                onClick={() => {
+                  setUseExactSearch(!useExactSearch);
+                  // 切换模式后重新搜索
+                  if (searchQuery) {
+                    if (searchDebounceRef.current) {
+                      clearTimeout(searchDebounceRef.current);
+                      searchDebounceRef.current = null;
+                    }
+                    setDebouncedSearchQuery(searchQuery);
+                  }
+                }}
+                className="absolute right-8 top-1.5 h-7 px-3 text-xs"
+                title={useExactSearch ? "精确搜索模式：匹配完整 key 名称" : "模糊搜索模式：支持通配符 *"}
+              >
+                精确
+              </Button>
+              {searchQuery && (
+                <button
+                  onClick={() => {
+                    setSearchQuery('');
+                    // 清除防抖定时器，立即清除搜索
+                    if (searchDebounceRef.current) {
+                      clearTimeout(searchDebounceRef.current);
+                      searchDebounceRef.current = null;
+                    }
+                    setDebouncedSearchQuery('');
+                  }}
+                  className="absolute right-2.5 top-2.5 h-4 w-4 text-muted-foreground hover:text-foreground transition-colors flex-shrink-0 flex items-center justify-center"
+                  title="清除搜索"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              )}
             </div>
             <select
               value={selectedType}
@@ -1510,7 +1762,7 @@ export function RedisBrowser({ connectionId }: RedisBrowserProps) {
 
           {/* 第二行：操作按钮 */}
           <TooltipProvider>
-            <div className="flex items-center gap-1 flex-wrap">
+            <div className="flex items-center gap-2 flex-wrap">
               {/* 第一组：添加、删除 */}
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -1551,15 +1803,7 @@ export function RedisBrowser({ connectionId }: RedisBrowserProps) {
               {/* 分隔线 */}
               <div className="w-px h-4 bg-border mx-1 shrink-0" />
 
-              {/* 第三组：命令、导出 */}
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button size="icon" variant="ghost" onClick={() => setShowCommandDialog(true)}>
-                    <Terminal className="h-4 w-4" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>执行命令</TooltipContent>
-              </Tooltip>
+              {/* 第三组：导出 */}
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button size="icon" variant="ghost" onClick={() => setShowExportDialog(true)}>
@@ -1603,13 +1847,47 @@ export function RedisBrowser({ connectionId }: RedisBrowserProps) {
 
         <ScrollArea className="flex-1 min-h-0">
           <div className="p-2 space-y-1 min-h-full">
-            {loading && filteredKeys.length === 0 ? (
+            {/* 搜索统计信息提示条 */}
+            {(searchStats.scanning || searchStats.total !== null || (debouncedSearchQuery || selectedType !== 'all')) && (
+              <div className="mb-2 p-2 bg-muted/50 rounded-md text-xs">
+                {searchStats.scanning ? (
+                  <div className="flex items-center gap-2 text-muted-foreground">
+                    <RefreshCw className="h-3 w-3 animate-spin" />
+                    <span>正在扫描所有 keys...</span>
+                  </div>
+                ) : searchStats.total !== null ? (
+                  <div className="text-muted-foreground">
+                    <span className="font-medium text-foreground">{searchStats.displayed}</span>
+                    <span> / </span>
+                    <span className="font-medium text-foreground">{searchStats.total}</span>
+                    <span> 个 keys</span>
+                    {searchStats.total > searchStats.displayed && (
+                      <span className="ml-2 text-xs text-muted-foreground">
+                        (仅显示前 {searchStats.displayed} 个，搜索时最多返回 1000 个)
+                      </span>
+                    )}
+                  </div>
+                ) : (debouncedSearchQuery || selectedType !== 'all') ? (
+                  <div className="text-muted-foreground">
+                    <span className="font-medium text-foreground">{searchStats.displayed}</span>
+                    <span> 个 keys</span>
+                    {debouncedSearchQuery && (
+                      <span className="ml-2 text-xs text-muted-foreground">
+                        (搜索时最多返回 1000 个)
+                      </span>
+                    )}
+                  </div>
+                ) : null}
+              </div>
+            )}
+
+            {loading && keys.length === 0 ? (
               <div className="flex items-center justify-center py-8">
                 <RefreshCw className="h-5 w-5 animate-spin text-primary" />
               </div>
             ) : (
               <>
-                {filteredKeys.length === 0 && !loading ? (
+                {keys.length === 0 && !loading ? (
                   <div className="text-center py-8 text-sm text-muted-foreground">
                     {selectedType !== 'all' ? (
                       <>
@@ -1630,17 +1908,17 @@ export function RedisBrowser({ connectionId }: RedisBrowserProps) {
                   </div>
                 ) : (
                   <>
-                    {filteredKeys.map((key) => (
+                    {keys.map((key) => (
                 <ContextMenu key={key.key}>
                   <ContextMenuTrigger asChild>
                     <div
                       className={`
-                        group flex items-center justify-between p-2 rounded-md cursor-pointer transition-all duration-200 ease-in-out
+                        group flex items-center justify-between p-3 rounded-md cursor-pointer transition-all duration-200 ease-in-out mb-1
                         ${selectedKey?.key === key.key ? 'bg-primary/10 text-primary scale-[1.02]' : 'hover:bg-muted hover:scale-[1.01]'}
                       `}
                       onClick={() => handleSelectKey(key)}
                     >
-                      <div className="flex items-center gap-2 flex-1 min-w-0">
+                      <div className="flex items-center gap-3 flex-1 min-w-0">
                         <Checkbox
                           checked={selectedKeys.has(key.key)}
                           onCheckedChange={(checked) => {
@@ -1656,7 +1934,7 @@ export function RedisBrowser({ connectionId }: RedisBrowserProps) {
                           >
                             {key.key}
                           </div>
-                          <div className="flex items-center gap-2 text-xs text-muted-foreground transition-all duration-200 mt-0.5">
+                          <div className="flex items-center gap-2 text-xs text-muted-foreground transition-all duration-200 mt-1">
                             <span className="px-1.5 py-0.5 rounded bg-muted/50 shrink-0">{key.type}</span>
                             {key.memory_usage !== undefined && (
                               <span className="text-[10px] shrink-0">({formatMemory(key.memory_usage)})</span>
@@ -1694,72 +1972,229 @@ export function RedisBrowser({ connectionId }: RedisBrowserProps) {
                   </ContextMenuContent>
                 </ContextMenu>
               ))}
-
-              {/* 加载中提示 */}
-              {loadingMore && (
-                <div className="flex justify-center py-4">
-                  <RefreshCw className="h-5 w-5 animate-spin text-primary" />
-                </div>
-              )}
-
-              {/* 加载更多触发器（不可见） */}
-              {hasMore && <div ref={loadMoreRef} className="h-1" />}
-
-              {/* 到底了提示 */}
-              {!hasMore && keys.length > 0 && (
-                <div ref={loadMoreRef} className={cn(
-                  "text-center py-4 text-xs text-muted-foreground transition-all duration-300",
-                  isAtBottom && "scale-110 text-primary font-medium"
-                )}>
-                  {isAtBottom ? (
-                    <div className="flex items-center justify-center gap-2">
-                      <span>🎉</span>
-                      <span>已经到底了，共 {keys.length} 个 keys</span>
-                      <span>🎉</span>
-                    </div>
-                  ) : (
-                    <span>已加载 {keys.length} 个 keys</span>
-                  )}
-                </div>
-              )}
-            </>
-            )}
-            </>
-            )}
-          </div>
-        </ScrollArea>
+              
+                            {/* 加载中提示 */}
+                            {loadingMore && (
+                              <div className="flex justify-center py-4">
+                                <RefreshCw className="h-5 w-5 animate-spin text-primary" />
+                              </div>
+                            )}
+              
+                            {/* 加载更多触发器（不可见） */}
+                            {(debouncedSearchQuery || selectedType !== 'all') ? null : hasMore && <div ref={loadMoreRef} className="h-1" />}
+              
+                            {/* 到底了提示 */}
+                            {!(debouncedSearchQuery || selectedType !== 'all') && !hasMore && keys.length > 0 && (
+                              <div ref={loadMoreRef} className={cn(
+                                "text-center py-4 text-xs text-muted-foreground transition-all duration-300",
+                                isAtBottom && "scale-110 text-primary font-medium"
+                              )}>
+                                {isAtBottom ? (
+                                  <div className="flex items-center justify-center gap-2">
+                                    <span>🎉</span>
+                                    <span>已经到底了，共 {keys.length} 个 keys</span>
+                                    <span>🎉</span>
+                                  </div>
+                                ) : (
+                                  <span>已加载 {keys.length} 个 keys</span>
+                                )}
+                              </div>
+                            )}
+                          </>
+                          )}
+                          </>
+                          )}
+                        </div>
+                      </ScrollArea>
       </div>
 
-      <div className="flex-1 p-4 overflow-hidden">
-        {selectedKey ? (
-          <div className="h-full">
-            <div className="mb-4">
-              <h3 className="text-lg font-semibold">{selectedKey.key}</h3>
-              <p className="text-sm text-muted-foreground">
-                类型: {selectedKey.type}
-              </p>
-            </div>
-            <div className="border rounded-lg p-4 min-h-[200px]">
-              {loadingKeyDetail ? (
-                <div className="flex flex-col items-center justify-center py-12 space-y-4">
-                  <RefreshCw className="h-8 w-8 animate-spin text-primary" />
-                  <div className="text-center space-y-2">
-                    <p className="text-sm font-medium text-muted-foreground">加载中...</p>
-                    <p className="text-xs text-muted-foreground opacity-60">正在从 Redis 获取数据</p>
-                  </div>
+      <div className="flex-1 p-6 overflow-hidden flex flex-col">
+        {/* 命令输入面板 */}
+        <div className="mb-4">
+          <Button
+            variant={showCommandInputPanel ? "default" : "outline"}
+            onClick={() => setShowCommandInputPanel(!showCommandInputPanel)}
+            className="mb-2"
+          >
+            <Terminal className="h-4 w-4 mr-2" />
+            {showCommandInputPanel ? '隐藏命令输入' : '显示命令输入'}
+          </Button>
+          
+          {showCommandInputPanel && (
+            <div className="space-y-4 animate-in slide-in-from-left-4 duration-300">
+              <div className="relative">
+                <label className="text-sm font-medium">Redis 命令</label>
+                <div className="relative">
+                  <Input
+                    ref={commandInputRef}
+                    placeholder="输入 Redis 命令，如: GET mykey 或 KEYS user:*"
+                    value={commandInput}
+                    onChange={(e) => {
+                      setCommandInput(e.target.value);
+                      filterCommands(e.target.value);
+                    }}
+                    className="mt-2 font-mono"
+                    onFocus={() => {
+                      if (commandInput.trim()) {
+                        filterCommands(commandInput);
+                      }
+                    }}
+                    onBlur={() => {
+                      setTimeout(() => {
+                        setShowCommandSuggestions(false);
+                      }, 200);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        if (showCommandSuggestions && selectedSuggestionIndex >= 0) {
+                          const selectedCommand = filteredCommands[selectedSuggestionIndex];
+                          setCommandInput(selectedCommand.name);
+                          setShowCommandSuggestions(false);
+                          setSelectedSuggestionIndex(-1);
+                          commandInputRef.current?.focus();
+                        } else {
+                          handleExecuteCommand();
+                        }
+                      } else if (e.key === 'ArrowDown') {
+                        e.preventDefault();
+                        setShowCommandSuggestions(true);
+                        setSelectedSuggestionIndex(prev => 
+                          prev < filteredCommands.length - 1 ? prev + 1 : prev
+                        );
+                      } else if (e.key === 'ArrowUp') {
+                        e.preventDefault();
+                        setSelectedSuggestionIndex(prev => 
+                          prev > 0 ? prev - 1 : -1
+                        );
+                      } else if (e.key === 'Escape') {
+                        setShowCommandSuggestions(false);
+                        setSelectedSuggestionIndex(-1);
+                      }
+                    }}
+                  />
+                  {showCommandSuggestions && filteredCommands.length > 0 && (
+                    <div className="absolute top-full left-0 right-0 mt-1 bg-background border rounded-md shadow-lg max-h-[250px] overflow-y-auto z-50">
+                      {filteredCommands.map((cmd, index) => (
+                        <div
+                          key={cmd.name}
+                          className={`
+                            px-4 py-3 cursor-pointer transition-colors
+                            ${index === selectedSuggestionIndex 
+                              ? 'bg-primary text-primary-foreground' 
+                              : 'hover:bg-muted'}
+                          `}
+                          onClick={() => {
+                            setCommandInput(cmd.name);
+                            setShowCommandSuggestions(false);
+                            setSelectedSuggestionIndex(-1);
+                            commandInputRef.current?.focus();
+                          }}
+                          onMouseEnter={() => setSelectedSuggestionIndex(index)}
+                        >
+                          <div className="font-mono font-semibold">{cmd.name}</div>
+                          <div className="text-xs opacity-70 mt-1">{cmd.description}</div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
-              ) : (
-                <div className="animate-in fade-in slide-in-from-bottom-4 duration-300">
-                  {renderValueEditor()}
+                <p className="text-xs text-muted-foreground mt-2">
+                  提示：按 Enter 执行命令，↑↓ 选择命令，ESC 关闭提示
+                </p>
+              </div>
+              
+              <div className="flex gap-2">
+                <Button onClick={handleExecuteCommand}>
+                  <Terminal className="h-4 w-4 mr-2" />
+                  执行
+                </Button>
+                {commandOutput && (
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setCommandInput('');
+                      setCommandOutput('');
+                      setCommandDuration(null);
+                      setShowCommandJsonFormatted(false);
+                    }}
+                  >
+                    清除结果
+                  </Button>
+                )}
+              </div>
+
+              {commandOutput && (
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <label className="text-sm font-medium">执行结果</label>
+                    <div className="flex items-center gap-3">
+                      {commandDuration !== null && (
+                        <span className="text-xs text-muted-foreground">
+                          耗时: {commandDuration < 1 ? `${(commandDuration * 1000).toFixed(2)}μs` : `${commandDuration}ms`}
+                        </span>
+                      )}
+                      {tryParseJSON(commandOutput) && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setShowCommandJsonFormatted(!showCommandJsonFormatted)}
+                          className="text-xs h-7 px-3"
+                        >
+                          {showCommandJsonFormatted ? '原始格式' : 'JSON 格式'}
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                  <div className="mt-2 bg-muted/50 rounded-lg p-5 max-h-[200px] overflow-auto">
+                    {showCommandJsonFormatted && tryParseJSON(commandOutput) ? (
+                      <pre className="text-sm font-mono whitespace-pre-wrap break-all">
+                        {formatJSON(tryParseJSON(commandOutput))}
+                      </pre>
+                    ) : (
+                      <pre className="text-sm font-mono whitespace-pre-wrap break-all">
+                        {commandOutput}
+                      </pre>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
-          </div>
-        ) : (
-          <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
-            选择一个 Key 查看详情
-          </div>
-        )}
+          )}
+        </div>
+
+        {/* Key 详情显示区域 */}
+        <div className="flex-1 overflow-auto">
+          {selectedKey ? (
+            <div>
+              <div className="mb-6">
+                <h3 className="text-xl font-semibold">{selectedKey.key}</h3>
+                <p className="text-sm text-muted-foreground mt-1">
+                  类型: {selectedKey.type}
+                </p>
+              </div>
+              <div className="border rounded-lg p-6 min-h-[200px]">
+                {loadingKeyDetail ? (
+                  <div className="flex flex-col items-center justify-center py-12 space-y-4">
+                    <RefreshCw className="h-8 w-8 animate-spin text-primary" />
+                    <div className="text-center space-y-2">
+                      <p className="text-sm font-medium text-muted-foreground">加载中...</p>
+                      <p className="text-xs text-muted-foreground opacity-60">正在从 Redis 获取数据</p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="animate-in fade-in slide-in-from-bottom-4 duration-300">
+                    {renderValueEditor()}
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
+              选择一个 Key 查看详情
+            </div>
+          )}
+        </div>
       </div>
 
       {/* 添加 Hash 字段对话框 */}
@@ -1904,57 +2339,6 @@ export function RedisBrowser({ connectionId }: RedisBrowserProps) {
         </div>
       )}
 
-      {/* 自定义命令执行器对话框 */}
-      {showCommandDialog && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-background rounded-lg p-6 w-[600px] max-w-[90vw]">
-            <h3 className="text-lg font-semibold mb-4">自定义命令执行器</h3>
-            <div className="space-y-4">
-              <div>
-                <label className="text-sm font-medium">Redis 命令</label>
-                <Input
-                  placeholder="输入 Redis 命令，如: GET mykey 或 KEYS user:*"
-                  value={commandInput}
-                  onChange={(e) => setCommandInput(e.target.value)}
-                  className="mt-2 font-mono"
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      handleExecuteCommand();
-                    }
-                  }}
-                />
-                <p className="text-xs text-muted-foreground mt-1">
-                  提示：按 Enter 执行命令
-                </p>
-              </div>
-              {commandOutput && (
-                <div>
-                  <label className="text-sm font-medium">执行结果</label>
-                  <div className="mt-2 bg-muted/50 rounded-lg p-4 max-h-[300px] overflow-auto">
-                    <pre className="text-sm font-mono whitespace-pre-wrap break-all">
-                      {commandOutput}
-                    </pre>
-                  </div>
-                </div>
-              )}
-              <div className="flex justify-end gap-2">
-                <Button variant="outline" onClick={() => {
-                  setShowCommandDialog(false);
-                  setCommandInput('');
-                  setCommandOutput('');
-                }}>
-                  关闭
-                </Button>
-                <Button onClick={handleExecuteCommand}>
-                  <Terminal className="h-4 w-4 mr-2" />
-                  执行
-                </Button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* 导出对话框 */}
       {showExportDialog && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
@@ -1966,7 +2350,7 @@ export function RedisBrowser({ connectionId }: RedisBrowserProps) {
                   将导出匹配 "{searchQuery || '*'}" 的所有 Keys 及其数据。
                 </p>
                 <p className="text-sm text-muted-foreground mt-2">
-                  预计导出 {filteredKeys.length} 个 Keys。
+                  预计导出 {keys.length} 个 Keys。
                 </p>
               </div>
               <div className="flex justify-end gap-2">
@@ -2051,18 +2435,18 @@ export function RedisBrowser({ connectionId }: RedisBrowserProps) {
                   <TableBody>
                     {slowlogData.map((log: any, index: number) => (
                       <TableRow key={index}>
-                        <TableCell className="font-mono">{log[0]}</TableCell>
+                        <TableCell className="font-mono">{log.id}</TableCell>
                         <TableCell>
-                          {new Date(log[1] * 1000).toLocaleString('zh-CN')}
+                          {new Date(log.timestamp * 1000).toLocaleString('zh-CN')}
                         </TableCell>
                         <TableCell className={cn(
                           "font-mono",
-                          log[2] > 10000 ? "text-destructive" : log[2] > 1000 ? "text-orange-500" : ""
+                          log.duration > 10000 ? "text-destructive" : log.duration > 1000 ? "text-orange-500" : ""
                         )}>
-                          {log[2]} μs
+                          {log.duration} μs
                         </TableCell>
                         <TableCell className="font-mono text-xs break-all">
-                          {Array.isArray(log[3]) ? log[3].join(' ') : log[3]}
+                          {Array.isArray(log.command) ? log.command.join(' ') : log.command}
                         </TableCell>
                       </TableRow>
                     ))}
@@ -2071,7 +2455,7 @@ export function RedisBrowser({ connectionId }: RedisBrowserProps) {
               )}
             </div>
             <div className="mt-4 text-xs text-muted-foreground">
-              提示：红色表示耗时超过 10ms，橙色表示耗时超过 1ms
+              提示：红色表示耗时超过 10,000μs（10ms），橙色表示耗时超过 1,000μs（1ms）
             </div>
           </div>
         </div>

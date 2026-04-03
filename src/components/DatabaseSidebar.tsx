@@ -79,6 +79,13 @@ export function DatabaseSidebar({ connectionId }: DatabaseSidebarProps) {
     try {
       const result: string[] = await invoke('get_mysql_databases', { connId: connectionId });
       setDatabases(result);
+      
+      // 自动选择第一个数据库（类似 Redis）
+      if (result.length > 0 && !activeDatabase) {
+        const firstDatabase = result[0];
+        setActiveDatabase(firstDatabase);
+        setSelectedTable(null);
+      }
     } catch (error) {
       console.error('加载数据库列表失败:', error);
     } finally {
@@ -118,25 +125,27 @@ export function DatabaseSidebar({ connectionId }: DatabaseSidebarProps) {
     }
   };
 
-  // 选择数据库（单击仅选中高亮）
+  // 选择数据库（单击直接加载表列表）
   const handleSelectDatabase = (database: string) => {
     setSelectedDatabase(database);
-  };
-
-  // 双击数据库（加载表列表）
-  const handleDoubleClickDatabase = (database: string) => {
     setActiveDatabase(database);
     setSelectedTable(null);
   };
 
-  // 选择表（单击仅选中高亮）
-  const handleSelectTable = (table: string) => {
-    setSelectedTable(table);
+  // 双击数据库（与单击相同，保留兼容性）
+  const handleDoubleClickDatabase = (database: string) => {
+    handleSelectDatabase(database);
   };
 
-  // 双击表（加载表数据）
-  const handleDoubleClickTable = (table: string) => {
+  // 选择表（单击直接加载表数据）
+  const handleSelectTable = (table: string) => {
+    setSelectedTable(table);
     setActiveTable(table);
+  };
+
+  // 双击表（与单击相同，保留兼容性）
+  const handleDoubleClickTable = (table: string) => {
+    handleSelectTable(table);
   };
 
   // 复制表名
@@ -346,8 +355,11 @@ export function DatabaseSidebar({ connectionId }: DatabaseSidebarProps) {
         </div>
       </div>
 
-      {/* 表列表 */}
-      <div className="w-40 border-r flex flex-col h-full main-content-transition">
+      {/* 表列表、视图列表、存储过程列表 */}
+      {activeDatabase && (
+        <>
+          {/* 表列表 */}
+          <div className="w-40 border-r flex flex-col h-full main-content-transition">
         <div className="p-2 border-b shrink-0">
           <h3 className="text-xs font-semibold transition-smooth">表</h3>
         </div>
@@ -515,6 +527,8 @@ export function DatabaseSidebar({ connectionId }: DatabaseSidebarProps) {
             </div>
           </div>
         </div>
+      )}
+        </>
       )}
 
       {/* DDL 查看对话框 */}

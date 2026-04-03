@@ -408,24 +408,6 @@ export default function DatabaseMonitorPanel({ connectionId, databaseType }: Dat
 
   return (
     <div className="h-full flex flex-col gap-4">
-      <div className="flex items-center justify-between shrink-0">
-        <h3 className="text-lg font-semibold">
-          {databaseType === 'mysql' && 'MySQL 监控'}
-          {databaseType === 'redis' && 'Redis 监控'}
-          {databaseType === 'mongodb' && 'MongoDB 监控'}
-        </h3>
-        <div className="flex items-center gap-2">
-          {loading && <RefreshCw className="h-4 w-4 animate-spin text-muted-foreground" />}
-          <button 
-            onClick={loadMonitorData}
-            className="p-2 hover:bg-muted rounded-md transition-colors"
-            title="刷新"
-          >
-            <RefreshCw className="h-4 w-4" />
-          </button>
-        </div>
-      </div>
-
       {!connectionId ? (
         <div className="flex-1 flex items-center justify-center text-muted-foreground">
           请先连接数据库
@@ -444,7 +426,20 @@ export default function DatabaseMonitorPanel({ connectionId, databaseType }: Dat
             {/* 图表 */}
             <Card>
               <CardHeader>
-                <CardTitle>实时监控图表</CardTitle>
+                <div className="flex items-center justify-between">
+                  <CardTitle>实时监控图表</CardTitle>
+                  <button
+                    onClick={loadMonitorData}
+                    className="p-2 hover:bg-muted rounded-md transition-colors"
+                    title="刷新"
+                  >
+                    {loading ? (
+                      <RefreshCw className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <RefreshCw className="h-4 w-4" />
+                    )}
+                  </button>
+                </div>
               </CardHeader>
               <CardContent>
                 {chartData.length > 0 ? (

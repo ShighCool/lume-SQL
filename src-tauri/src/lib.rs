@@ -76,6 +76,7 @@ pub fn run() {
             commands::redis::disconnect_redis,
             commands::redis::get_redis_keys,
             commands::redis::get_redis_keys_by_type,
+            commands::redis::search_redis_keys_exact,
             commands::redis::get_redis_value,
             commands::redis::get_redis_key_type,
             commands::redis::get_redis_key_ttl,
