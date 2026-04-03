@@ -18,7 +18,6 @@ export function SQLEditor() {
   const [results, setResults] = useState<Record<string, unknown>[]>([]);
 
   const handleExecute = () => {
-    console.log('Executing SQL:', sql);
     // 暂时使用模拟数据
     setResults([
       { id: 1, name: 'Alice', email: 'alice@example.com' },

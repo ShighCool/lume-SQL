@@ -248,7 +248,7 @@ export function ConnectionForm({ open, onOpenChange, editingConnectionId }: Conn
         try {
           await disconnectConnection(editingConnectionId);
         } catch (error) {
-          console.error('断开连接失败:', error);
+          // Error handling without console logging
         }
       }
       

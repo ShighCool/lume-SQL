@@ -18,8 +18,6 @@ interface MongoDBBrowserProps {
 }
 
 export function MongoDBBrowser({ connectionId }: MongoDBBrowserProps) {
-  console.log('[MongoDBBrowser] Rendering with connectionId:', connectionId);
-
   const [databases, setDatabases] = useState<string[]>([]);
   const [selectedDatabase, setSelectedDatabase] = useState<string | null>(null);
   const [collections, setCollections] = useState<string[]>([]);
@@ -73,40 +71,30 @@ export function MongoDBBrowser({ connectionId }: MongoDBBrowserProps) {
   // 加载数据库列表
   const loadDatabases = useCallback(async () => {
     if (!connectionId) {
-      console.log('loadDatabases: connectionId is null');
       return;
     }
     try {
-      console.log('loadDatabases: starting, connId:', connectionId);
       const result: string[] = await invoke('get_mongodb_databases', {
         connId: connectionId,
       });
-      console.log('loadDatabases: result:', result);
       setDatabases(result);
     } catch (error) {
-      console.error('加载数据库列表失败:', error);
+      alert(`加载数据库列表失败: ${error}`);
     }
   }, [connectionId]);
 
   // 加载集合列表
   const loadCollections = useCallback(async () => {
     if (!connectionId || !selectedDatabase) {
-      console.log('loadCollections: connectionId or selectedDatabase is null', {
-        connectionId,
-        selectedDatabase,
-      });
       return;
     }
     setLoading(true);
     try {
-      console.log('loadCollections: starting, connId:', connectionId, 'database:', selectedDatabase);
       const result: string[] = await invoke('get_mongodb_collections', {
         connId: connectionId,
       });
-      console.log('loadCollections: result:', result);
       setCollections(result);
     } catch (error) {
-      console.error('加载集合列表失败:', error);
       alert(`加载集合列表失败: ${error}`);
     } finally {
       setLoading(false);
@@ -114,14 +102,12 @@ export function MongoDBBrowser({ connectionId }: MongoDBBrowserProps) {
   }, [connectionId, selectedDatabase]);
 
   useEffect(() => {
-    console.log('[MongoDBBrowser] useEffect connectionId changed:', connectionId);
     if (connectionId) {
       loadDatabases();
     }
   }, [connectionId]);
 
   useEffect(() => {
-    console.log('[MongoDBBrowser] useEffect selectedDatabase changed:', selectedDatabase);
     if (connectionId && selectedDatabase) {
       loadCollections();
     }
@@ -129,9 +115,7 @@ export function MongoDBBrowser({ connectionId }: MongoDBBrowserProps) {
 
   // 当选择集合时加载数据
   useEffect(() => {
-    console.log('[MongoDBBrowser] useEffect selectedCollection changed:', selectedCollection);
     if (connectionId && selectedCollection) {
-      console.log('[MongoDBBrowser]   loading documents for collection:', selectedCollection);
       loadDocuments();
     }
   }, [connectionId, selectedCollection, currentPage, pageSize]);
@@ -139,21 +123,10 @@ export function MongoDBBrowser({ connectionId }: MongoDBBrowserProps) {
   // 加载文档
   const loadDocuments = useCallback(async () => {
     if (!connectionId || !selectedCollection) {
-      console.log('[MongoDBBrowser] loadDocuments: connectionId or selectedCollection is null', {
-        connectionId,
-        selectedCollection,
-      });
       return;
     }
     setLoading(true);
     try {
-      console.log('[MongoDBBrowser] loadDocuments: starting');
-      console.log('[MongoDBBrowser]   connId:', connectionId);
-      console.log('[MongoDBBrowser]   collection:', selectedCollection);
-      console.log('[MongoDBBrowser]   filterQuery:', filterQuery);
-      console.log('[MongoDBBrowser]   page:', currentPage - 1);
-      console.log('[MongoDBBrowser]   pageSize:', pageSize);
-
       const result: string = await invoke('find_mongodb_documents', {
         connId: connectionId,
         collection: selectedCollection,
@@ -162,12 +135,7 @@ export function MongoDBBrowser({ connectionId }: MongoDBBrowserProps) {
         pageSize: pageSize,
       });
 
-      console.log('[MongoDBBrowser]   raw result length:', result.length);
-      console.log('[MongoDBBrowser]   raw result:', result);
-
       const docs = JSON.parse(result);
-      console.log('[MongoDBBrowser]   parsed docs length:', docs.length);
-      console.log('[MongoDBBrowser]   parsed docs:', docs);
       setDocuments(docs);
 
       // 自动设置所有字段为可见
@@ -186,12 +154,9 @@ export function MongoDBBrowser({ connectionId }: MongoDBBrowserProps) {
         connId: connectionId,
         collection: selectedCollection,
       });
-      console.log('[MongoDBBrowser]   count:', count);
       setDocumentCount(count);
       setTotalPages(Math.ceil(count / pageSize));
-      console.log('[MongoDBBrowser]   totalPages:', Math.ceil(count / pageSize));
     } catch (error) {
-      console.error('[MongoDBBrowser] 加载文档失败:', error);
       alert(`加载文档失败: ${error}`);
     } finally {
       setLoading(false);
@@ -199,19 +164,16 @@ export function MongoDBBrowser({ connectionId }: MongoDBBrowserProps) {
   }, [connectionId, selectedCollection, filterQuery, currentPage, pageSize]);
 
   const handleSelectDatabase = (database: string) => {
-    console.log('handleSelectDatabase:', database);
     setSelectedDatabase(database);
     setSelectedCollection(null);
     setDocuments([]);
   };
 
   const handleSelectCollection = (collection: string) => {
-    console.log('handleSelectCollection:', collection);
     setSelectedCollection(collection);
   };
 
   const handleRefresh = () => {
-    console.log('handleRefresh: refreshing all');
     loadDatabases();
     if (selectedDatabase) {
       loadCollections();
@@ -239,7 +201,6 @@ export function MongoDBBrowser({ connectionId }: MongoDBBrowserProps) {
       setNewCollectionName('');
       loadCollections();
     } catch (error) {
-      console.error('创建集合失败:', error);
       alert(`创建集合失败: ${error}`);
     }
   };
@@ -261,7 +222,6 @@ export function MongoDBBrowser({ connectionId }: MongoDBBrowserProps) {
       }
       loadCollections();
     } catch (error) {
-      console.error('删除集合失败:', error);
       alert(`删除集合失败: ${error}`);
     }
   };
@@ -280,7 +240,6 @@ export function MongoDBBrowser({ connectionId }: MongoDBBrowserProps) {
       setCollectionStats(stats as string);
       setShowCollectionStatsDialog(true);
     } catch (error) {
-      console.error('获取集合统计失败:', error);
       alert(`获取集合统计失败: ${error}`);
     }
   };
@@ -305,7 +264,6 @@ export function MongoDBBrowser({ connectionId }: MongoDBBrowserProps) {
       setSelectedCollection(newCollectionNameForRename.trim());
       loadCollections();
     } catch (error) {
-      console.error('重命名集合失败:', error);
       alert(`重命名集合失败: ${error}`);
     }
   };
@@ -361,7 +319,6 @@ export function MongoDBBrowser({ connectionId }: MongoDBBrowserProps) {
       if (error instanceof SyntaxError) {
         alert('无效的 JSON 格式');
       } else {
-        console.error('保存文档失败:', error);
         alert(`保存文档失败: ${error}`);
       }
     }
@@ -381,7 +338,6 @@ export function MongoDBBrowser({ connectionId }: MongoDBBrowserProps) {
       alert('文档删除成功');
       loadDocuments();
     } catch (error) {
-      console.error('删除文档失败:', error);
       alert(`删除文档失败: ${error}`);
     }
   };
@@ -433,7 +389,6 @@ export function MongoDBBrowser({ connectionId }: MongoDBBrowserProps) {
       setEditValue('');
       loadDocuments();
     } catch (error) {
-      console.error('更新文档失败:', error);
       alert(`更新文档失败: ${error}`);
     }
   };
@@ -486,7 +441,6 @@ export function MongoDBBrowser({ connectionId }: MongoDBBrowserProps) {
       setSelectAll(false);
       loadDocuments();
     } catch (error) {
-      console.error('批量删除失败:', error);
       alert(`批量删除失败: ${error}`);
     }
   };
@@ -624,7 +578,6 @@ export function MongoDBBrowser({ connectionId }: MongoDBBrowserProps) {
       alert(`导出成功，共 ${allDocs.length} 个文档`);
       setShowExportDialog(false);
     } catch (error) {
-      console.error('导出失败:', error);
       alert(`导出失败: ${error}`);
     }
   };
@@ -654,7 +607,6 @@ export function MongoDBBrowser({ connectionId }: MongoDBBrowserProps) {
 
       setShowQueryDialog(false);
     } catch (error) {
-      console.error('查询失败:', error);
       alert(`查询失败: ${error}`);
     } finally {
       setLoading(false);
@@ -778,7 +730,6 @@ export function MongoDBBrowser({ connectionId }: MongoDBBrowserProps) {
   };
 
   if (!connectionId) {
-    console.log('[MongoDBBrowser] No connectionId provided, showing placeholder');
     return (
       <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
         请先选择一个连接

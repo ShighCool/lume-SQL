@@ -80,7 +80,7 @@ export default function DataComparisonDialog({
       });
       setAvailableTables(tables.filter((t) => t !== table));
     } catch (error) {
-      console.error('加载表列表失败:', error);
+      // Error handling without console logging
     }
   };
 
@@ -97,7 +97,6 @@ export default function DataComparisonDialog({
       });
       setStructureDiff(result);
     } catch (error) {
-      console.error('表结构对比失败:', error);
       alert('表结构对比失败: ' + error);
     } finally {
       setLoading(false);
@@ -117,7 +116,6 @@ export default function DataComparisonDialog({
       });
       setDataDiff(result);
     } catch (error) {
-      console.error('数据对比失败:', error);
       alert('数据对比失败: ' + error);
     } finally {
       setLoading(false);

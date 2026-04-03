@@ -61,7 +61,6 @@ export default function ERDiagramPanel({ connectionId, database }: ERDiagramPane
       });
       setErDiagram(result);
     } catch (error) {
-      console.error('加载 ER 图失败:', error);
       alert('加载 ER 图失败: ' + error);
     } finally {
       setLoading(false);

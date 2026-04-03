@@ -81,7 +81,6 @@ export default function AuditLogDialog({
       setTotal(result[1]);
       setTableCreated(true);
     } catch (error) {
-      console.error('加载审计日志失败:', error);
       setTableCreated(false);
     } finally {
       setLoading(false);
@@ -96,7 +95,6 @@ export default function AuditLogDialog({
       setTableCreated(true);
       loadLogs();
     } catch (error) {
-      console.error('创建审计日志表失败:', error);
       alert('创建审计日志表失败: ' + error);
     }
   };
@@ -111,7 +109,6 @@ export default function AuditLogDialog({
       });
       loadLogs();
     } catch (error) {
-      console.error('清除审计日志失败:', error);
       alert('清除审计日志失败: ' + error);
     }
   };

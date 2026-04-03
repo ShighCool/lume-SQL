@@ -42,7 +42,7 @@ export default function ApiManagerDialog({
       setApiStatus(status);
       setApiPort(port);
     } catch (error) {
-      console.error('检查 API 状态失败:', error);
+      // Error handling without console logging
     }
   };
 
@@ -59,7 +59,6 @@ export default function ApiManagerDialog({
       alert(result);
       checkApiStatus();
     } catch (error) {
-      console.error('启动 API 服务器失败:', error);
       alert('启动失败: ' + error);
     } finally {
       setLoading(false);
@@ -73,7 +72,6 @@ export default function ApiManagerDialog({
       alert(result);
       checkApiStatus();
     } catch (error) {
-      console.error('停止 API 服务器失败:', error);
       alert('停止失败: ' + error);
     } finally {
       setLoading(false);

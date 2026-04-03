@@ -55,7 +55,6 @@ export function IndexManagerDialog({
       });
       setIndexes(data as IndexDetail[]);
     } catch (error) {
-      console.error('加载索引失败:', error);
       alert(`加载索引失败: ${error}`);
     } finally {
       setLoading(false);
@@ -71,7 +70,7 @@ export function IndexManagerDialog({
       });
       setAvailableColumns(columns.map((col: any) => col.name));
     } catch (error) {
-      console.error('加载列信息失败:', error);
+      // Error handling without console logging
     }
   };
 
@@ -92,7 +91,6 @@ export function IndexManagerDialog({
         alert('索引删除成功');
         loadIndexes();
       } catch (error) {
-        console.error('删除索引失败:', error);
         alert(`删除索引失败: ${error}`);
       }
     }
@@ -126,7 +124,6 @@ export function IndexManagerDialog({
       setNewIndexIsUnique(false);
       loadIndexes();
     } catch (error) {
-      console.error('添加索引失败:', error);
       alert(`添加索引失败: ${error}`);
     }
   };

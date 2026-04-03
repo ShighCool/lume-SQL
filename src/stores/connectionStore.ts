@@ -196,7 +196,6 @@ export const useConnectionStore = create<ConnectionState>()(
             setConnectionStatus(id, 'disconnected');
           }
         } catch (error) {
-          console.error('断开连接失败:', error);
           throw error;
         }
       },
@@ -238,7 +237,6 @@ export const useConnectionStore = create<ConnectionState>()(
           }
           return result;
         } catch (error) {
-          console.error('测试连接失败:', error);
           // 抛出错误，让前端捕获并显示详细错误信息
           throw error;
         }

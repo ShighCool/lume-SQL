@@ -66,7 +66,6 @@ export function ERDiagramDialog({ open, onOpenChange, connectionId, database }: 
       });
       setDiagram(data as ERDiagram);
     } catch (error) {
-      console.error('加载ER图失败:', error);
       alert(`加载ER图失败: ${error}`);
     } finally {
       setLoading(false);

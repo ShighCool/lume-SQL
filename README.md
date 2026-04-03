@@ -40,12 +40,14 @@ QueryDB 是一个功能丰富的桌面数据库管理工具，旨在为开发者
 ### MySQL 功能
 
 #### 基础功能
+
 - ✅ 数据库列表查看
 - ✅ 表数据浏览
 - ✅ SQL 查询执行
 - ✅ 表结构查看和编辑
 
 #### 高级功能
+
 - ✅ 索引管理（创建、查看、删除）
 - ✅ 外键管理（创建、查看、删除）
 - ✅ 视图管理（创建、查看、删除）
@@ -100,30 +102,30 @@ QueryDB 是一个功能丰富的桌面数据库管理工具，旨在为开发者
 
 ### 前端技术
 
-| 技术 | 版本 | 用途 |
-|------|------|------|
-| React | 19.1.0 | UI 框架 |
-| TypeScript | 5.8.3 | 类型安全 |
-| Vite | 7.0.4 | 构建工具 |
-| Tailwind CSS | 4.2.2 | CSS 框架 |
-| Monaco Editor | 4.7.0 | 代码编辑器 |
-| Radix UI | 1.4.3 | 无障碍 UI 组件 |
-| Lucide React | 1.7.0 | 图标库 |
-| Zustand | 5.0.12 | 状态管理 |
-| Recharts | 3.8.1 | 图表库 |
+| 技术          | 版本   | 用途           |
+| ------------- | ------ | -------------- |
+| React         | 19.1.0 | UI 框架        |
+| TypeScript    | 5.8.3  | 类型安全       |
+| Vite          | 7.0.4  | 构建工具       |
+| Tailwind CSS  | 4.2.2  | CSS 框架       |
+| Monaco Editor | 4.7.0  | 代码编辑器     |
+| Radix UI      | 1.4.3  | 无障碍 UI 组件 |
+| Lucide React  | 1.7.0  | 图标库         |
+| Zustand       | 5.0.12 | 状态管理       |
+| Recharts      | 3.8.1  | 图表库         |
 
 ### 后端技术
 
-| 技术 | 版本 | 用途 |
-|------|------|------|
-| Rust | 2021 edition | 核心后端 |
-| Tauri | 2.0 | 桌面应用框架 |
-| MySQL | 25.0 | MySQL 连接 |
-| Redis | 0.27 | Redis 连接 |
-| MongoDB | 3.0 | MongoDB 连接 |
-| Tokio | 1.0 | 异步运行时 |
-| Serde | 1.0 | 序列化/反序列化 |
-| chrono | 0.4 | 日期时间处理 |
+| 技术    | 版本         | 用途            |
+| ------- | ------------ | --------------- |
+| Rust    | 2021 edition | 核心后端        |
+| Tauri   | 2.0          | 桌面应用框架    |
+| MySQL   | 25.0         | MySQL 连接      |
+| Redis   | 0.27         | Redis 连接      |
+| MongoDB | 3.0          | MongoDB 连接    |
+| Tokio   | 1.0          | 异步运行时      |
+| Serde   | 1.0          | 序列化/反序列化 |
+| chrono  | 0.4          | 日期时间处理    |
 
 ---
 
@@ -140,22 +142,26 @@ QueryDB 是一个功能丰富的桌面数据库管理工具，旨在为开发者
 ### 安装步骤
 
 1. **克隆项目**
+
 ```bash
 git clone https://github.com/yourusername/querydb.git
 cd querydb
 ```
 
 2. **安装依赖**
+
 ```bash
 npm install
 ```
 
 3. **开发模式运行**
+
 ```bash
 npm run tauri dev
 ```
 
 4. **构建生产版本**
+
 ```bash
 npm run tauri build
 ```
@@ -254,6 +260,7 @@ fn test_mysql_connection(config: MysqlConfig) -> Result<String, String> {
 ### SQL 编辑器
 
 使用 Monaco Editor 提供专业的 SQL 编辑体验：
+
 - 语法高亮
 - 代码提示
 - 多标签页支持
@@ -262,6 +269,7 @@ fn test_mysql_connection(config: MysqlConfig) -> Result<String, String> {
 ### ER 图生成
 
 基于关系型数据库的表结构自动生成 ER 图，支持：
+
 - 表关系可视化
 - 导出为图片
 - 自动布局
@@ -269,6 +277,7 @@ fn test_mysql_connection(config: MysqlConfig) -> Result<String, String> {
 ### 性能监控
 
 实时监控数据库性能指标：
+
 - QPS（每秒查询数）
 - 连接数
 - 缓存命中率
@@ -277,6 +286,7 @@ fn test_mysql_connection(config: MysqlConfig) -> Result<String, String> {
 ### 数据同步
 
 支持数据库之间的数据同步：
+
 - 主从复制状态监控
 - 数据一致性检查
 - 复制延迟监控
@@ -285,6 +295,7 @@ fn test_mysql_connection(config: MysqlConfig) -> Result<String, String> {
 ### 审计日志
 
 记录所有关键操作：
+
 - SQL 执行历史
 - 用户操作记录
 - 敏感数据访问
@@ -388,5 +399,6 @@ fn test_mysql_connection(config: MysqlConfig) -> Result<String, String> {
 
 **如果这个项目对你有帮助，请给个 ⭐️ Star 支持一下！**
 
-Made with ❤️ by QueryDB Team
+Light queries, bright results.
+
 </div>

@@ -17,22 +17,17 @@ pub async fn test_mongodb_connection(
     password: Option<String>,
     database: String,
 ) -> Result<bool, String> {
-    println!("[MongoDB] test_connection called with: host={}, port={}, database={}", host, port, database);
     let connection_string = build_connection_string(&host, port, &username, &password, &database);
-    println!("[MongoDB] connection_string: {}", connection_string);
 
     let client = Client::with_uri_str(&connection_string)
         .await
         .map_err(|e| format!("Failed to create MongoDB client: {}", e))?;
-
-    println!("[MongoDB] client created successfully");
 
     client
         .list_database_names()
         .await
         .map_err(|e| format!("Connection test failed: {}", e))?;
 
-    println!("[MongoDB] connection test successful");
     Ok(true)
 }
 
@@ -45,15 +40,11 @@ pub async fn connect_mongodb(
     password: Option<String>,
     database: String,
 ) -> Result<bool, String> {
-    println!("[MongoDB] connect called: conn_id={}, host={}, port={}, database={}", conn_id, host, port, database);
     let connection_string = build_connection_string(&host, port, &username, &password, &database);
-    println!("[MongoDB] connection_string: {}", connection_string);
 
     let client = Client::with_uri_str(&connection_string)
         .await
         .map_err(|e| format!("Failed to create MongoDB client: {}", e))?;
-
-    println!("[MongoDB] client created successfully");
 
     client
         .list_database_names()
@@ -64,9 +55,7 @@ pub async fn connect_mongodb(
         format!("Failed to get connection lock: {}", e)
     })?;
 
-    let conn_id_clone = conn_id.clone();
     connections.insert(conn_id, (client, database));
-    println!("[MongoDB] connection stored successfully: conn_id={}", conn_id_clone);
     Ok(true)
 }
 
@@ -84,14 +73,10 @@ pub fn disconnect_mongodb(conn_id: String) -> Result<bool, String> {
 
 #[tauri::command]
 pub async fn get_mongodb_collections(conn_id: String) -> Result<Vec<String>, String> {
-    println!("[MongoDB] get_mongodb_collections called with conn_id: {}", conn_id);
-
     let (client, database_name) = {
         let connections = CONNECTIONS.lock().map_err(|e| {
             format!("Failed to get connection lock: {}", e)
         })?;
-
-        println!("[MongoDB] CONNECTIONS: {:?}", connections.keys().collect::<Vec<_>>());
 
         let (client, database_name) = connections
             .get(&conn_id)
@@ -100,17 +85,12 @@ pub async fn get_mongodb_collections(conn_id: String) -> Result<Vec<String>, Str
         (client.clone(), database_name.clone())
     };
 
-    println!("[MongoDB] client obtained successfully, database: {}", database_name);
-
     let db = client.database(&database_name);
-    println!("[MongoDB] database obtained successfully");
 
     let mut collections: Vec<String> = db
         .list_collection_names()
         .await
         .map_err(|e| format!("Failed to get collection list: {}", e))?;
-
-    println!("[MongoDB] collection names obtained: {:?}", collections);
 
     // 按名称排序，与 MySQL 的行为一致
     collections.sort();
@@ -126,13 +106,6 @@ pub async fn find_mongodb_documents(
     page: u32,
     page_size: u32,
 ) -> Result<String, String> {
-    println!("[MongoDB] find_mongodb_documents called:");
-    println!("[MongoDB]   conn_id: {}", conn_id);
-    println!("[MongoDB]   collection: {}", collection);
-    println!("[MongoDB]   filter: {}", filter);
-    println!("[MongoDB]   page: {}", page);
-    println!("[MongoDB]   page_size: {}", page_size);
-
     let (client, database_name) = {
         let connections = CONNECTIONS.lock().map_err(|e| {
             format!("Failed to get connection lock: {}", e)
@@ -145,26 +118,18 @@ pub async fn find_mongodb_documents(
         (client.clone(), database_name.clone())
     };
 
-    println!("[MongoDB]   database: {}", database_name);
-
     let db = client.database(&database_name);
     let coll = db.collection::<Document>(&collection);
-    println!("[MongoDB]   collection object obtained");
 
     let filter_doc = if filter.is_empty() {
-        println!("[MongoDB]   filter is empty, using empty Document");
         Document::new()
     } else {
-        let parsed = serde_json::from_str(&filter)
-            .map_err(|e| format!("Failed to parse filter: {}", e))?;
-        println!("[MongoDB]   filter parsed: {:?}", parsed);
-        parsed
+        serde_json::from_str(&filter)
+            .map_err(|e| format!("Failed to parse filter: {}", e))?
     };
 
     let skip = (page as u64) * (page_size as u64);
     let limit = page_size as i64;
-
-    println!("[MongoDB]   querying with skip={}, limit={}", skip, limit);
 
     let cursor = coll
         .find(filter_doc)
@@ -173,26 +138,12 @@ pub async fn find_mongodb_documents(
             .limit(limit)
             .build())
         .await
-        .map_err(|e| {
-            println!("[MongoDB]   find query failed: {}", e);
-            format!("Failed to query documents: {}", e)
-        })?;
-
-    println!("[MongoDB]   cursor obtained successfully");
+        .map_err(|e| format!("Failed to query documents: {}", e))?;
 
     let documents: Vec<Document> = cursor
         .try_collect()
         .await
-        .map_err(|e| {
-            println!("[MongoDB]   collect documents failed: {}", e);
-            format!("Failed to collect documents: {}", e)
-        })?;
-
-    println!("[MongoDB]   collected {} documents", documents.len());
-
-    for (i, doc) in documents.iter().enumerate() {
-        println!("[MongoDB]   doc[{}]: {:?}", i, doc);
-    }
+        .map_err(|e| format!("Failed to collect documents: {}", e))?;
 
     serde_json::to_string_pretty(&documents)
         .map_err(|e| format!("Failed to serialize documents: {}", e))
@@ -200,14 +151,10 @@ pub async fn find_mongodb_documents(
 
 #[tauri::command]
 pub async fn get_mongodb_databases(conn_id: String) -> Result<Vec<String>, String> {
-    println!("[MongoDB] get_mongodb_databases called with conn_id: {}", conn_id);
-
     let (client, _) = {
         let connections = CONNECTIONS.lock().map_err(|e| {
             format!("Failed to get connection lock: {}", e)
         })?;
-
-        println!("[MongoDB] CONNECTIONS: {:?}", connections.keys().collect::<Vec<_>>());
 
         let (client, _) = connections
             .get(&conn_id)
@@ -216,14 +163,10 @@ pub async fn get_mongodb_databases(conn_id: String) -> Result<Vec<String>, Strin
         (client.clone(), String::new())
     };
 
-    println!("[MongoDB] client obtained successfully");
-
     let mut databases: Vec<String> = client
         .list_database_names()
         .await
         .map_err(|e| format!("Failed to get database list: {}", e))?;
-
-    println!("[MongoDB] database names obtained: {:?}", databases);
 
     // 按名称排序，与 MySQL 的行为一致
     databases.sort();
@@ -370,10 +313,6 @@ pub async fn count_mongodb_documents(
     conn_id: String,
     collection: String,
 ) -> Result<u64, String> {
-    println!("[MongoDB] count_mongodb_documents called:");
-    println!("[MongoDB]   conn_id: {}", conn_id);
-    println!("[MongoDB]   collection: {}", collection);
-
     let (client, database_name) = {
         let connections = CONNECTIONS.lock().map_err(|e| {
             format!("Failed to get connection lock: {}", e)
@@ -386,18 +325,11 @@ pub async fn count_mongodb_documents(
         (client.clone(), database_name.clone())
     };
 
-    println!("[MongoDB]   database: {}", database_name);
-
     let db = client.database(&database_name);
     let count = db.collection::<Document>(&collection)
         .count_documents(doc! {})
         .await
-        .map_err(|e| {
-            println!("[MongoDB]   count_documents failed: {}", e);
-            format!("Failed to count documents: {}", e)
-        })?;
-
-    println!("[MongoDB]   count: {}", count);
+        .map_err(|e| format!("Failed to count documents: {}", e))?;
 
     Ok(count)
 }

@@ -65,7 +65,6 @@ export default function AuditLogPanel({ connectionId, database }: AuditLogPanelP
         loadLogs();
       }
     } catch (error) {
-      console.error('检查审计日志表失败:', error);
       setTableExists(false);
     }
   };
@@ -98,7 +97,6 @@ export default function AuditLogPanel({ connectionId, database }: AuditLogPanelP
       }
       setTableCreated(true);
     } catch (error) {
-      console.error('加载审计日志失败:', error);
       // 不要设置 tableCreated = false，因为表可能已经存在只是没有数据
     } finally {
       setLoading(false);
@@ -117,7 +115,6 @@ export default function AuditLogPanel({ connectionId, database }: AuditLogPanelP
       setTableCreated(true);
       loadLogs();
     } catch (error) {
-      console.error('创建审计日志表失败:', error);
       alert('创建审计日志表失败: ' + error);
     }
   };
@@ -134,7 +131,6 @@ export default function AuditLogPanel({ connectionId, database }: AuditLogPanelP
       });
       loadLogs();
     } catch (error) {
-      console.error('清除审计日志失败:', error);
       alert('清除审计日志失败: ' + error);
     }
   };

@@ -64,7 +64,7 @@ export default function QueryHistoryDialog({
         setHistory(items);
       }
     } catch (error) {
-      console.error('加载查询历史失败:', error);
+      // Error handling without console logging
     } finally {
       setLoading(false);
     }
@@ -74,7 +74,7 @@ export default function QueryHistoryDialog({
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
     } catch (error) {
-      console.error('保存查询历史失败:', error);
+      // Error handling without console logging
     }
   };
 
@@ -339,6 +339,6 @@ export function addQueryToHistory(
 
     localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
   } catch (error) {
-    console.error('保存查询历史失败:', error);
+    // Error handling without console logging
   }
 }

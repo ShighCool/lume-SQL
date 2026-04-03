@@ -2720,6 +2720,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "lume-sql"
+version = "0.1.0"
+dependencies = [
+ "base64 0.22.1",
+ "chrono",
+ "futures-util",
+ "lazy_static",
+ "mongodb",
+ "mysql",
+ "redis",
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-opener",
+ "tokio",
+ "warp",
+]
+
+[[package]]
 name = "mac"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3951,26 +3971,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 1.0.109",
-]
-
-[[package]]
-name = "querydb"
-version = "0.1.0"
-dependencies = [
- "base64 0.22.1",
- "chrono",
- "futures-util",
- "lazy_static",
- "mongodb",
- "mysql",
- "redis",
- "serde",
- "serde_json",
- "tauri",
- "tauri-build",
- "tauri-plugin-opener",
- "tokio",
- "warp",
 ]
 
 [[package]]

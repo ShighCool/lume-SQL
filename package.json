@@ -1,7 +1,8 @@
 {
-  "name": "querydb",
+  "name": "lume-sql",
   "private": true,
   "version": "0.1.0",
+  "description":"Lume SQL 数据库工具",
   "type": "module",
   "scripts": {
     "dev": "vite",

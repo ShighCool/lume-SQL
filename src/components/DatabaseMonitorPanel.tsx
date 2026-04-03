@@ -80,7 +80,7 @@ export default function DatabaseMonitorPanel({ connectionId, databaseType }: Dat
         return newHistory;
       });
     } catch (error) {
-      console.error('加载监控数据失败:', error);
+      // Error handling without console logging
     } finally {
       setLoading(false);
     }

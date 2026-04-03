@@ -54,7 +54,6 @@ export function DataSyncDialog({ open, onOpenChange, connectionId, database, tab
       const data = await invoke('get_replication_status', { connId: connectionId });
       setReplicationStatus(data as ReplicationStatus);
     } catch (error) {
-      console.error('加载复制状态失败:', error);
       alert(`加载复制状态失败: ${error}`);
     } finally {
       setLoading(false);
@@ -72,7 +71,6 @@ export function DataSyncDialog({ open, onOpenChange, connectionId, database, tab
       });
       setConsistencyResult(result as string);
     } catch (error) {
-      console.error('检查数据一致性失败:', error);
       alert(`检查数据一致性失败: ${error}`);
     } finally {
       setConsistencyLoading(false);

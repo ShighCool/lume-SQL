@@ -110,7 +110,6 @@ export function TableDesignDialog({
       loadAvailableColumns();
       loadAvailableTables();
     } catch (error) {
-      console.error('加载表结构失败:', error);
       alert(`加载表结构失败: ${error}`);
     } finally {
       setLoading(false);
@@ -127,7 +126,7 @@ export function TableDesignDialog({
       });
       setIndexes(data as IndexDetail[]);
     } catch (error) {
-      console.error('加载索引失败:', error);
+      // Error handling without console logging
     } finally {
       setIndexLoading(false);
     }
@@ -142,7 +141,7 @@ export function TableDesignDialog({
       });
       setAvailableColumns(columns.map((col: any) => col.name));
     } catch (error) {
-      console.error('加载列信息失败:', error);
+      // Error handling without console logging
     }
   };
 
@@ -183,7 +182,6 @@ export function TableDesignDialog({
       onSaved();
       onOpenChange(false);
     } catch (error) {
-      console.error('保存失败:', error);
       alert(`保存失败: ${error}`);
     } finally {
       setSaving(false);
@@ -289,7 +287,6 @@ export function TableDesignDialog({
         alert('索引删除成功');
         loadIndexes();
       } catch (error) {
-        console.error('删除索引失败:', error);
         alert(`删除索引失败: ${error}`);
       }
     }
@@ -323,7 +320,6 @@ export function TableDesignDialog({
       setNewIndexIsUnique(false);
       loadIndexes();
     } catch (error) {
-      console.error('添加索引失败:', error);
       alert(`添加索引失败: ${error}`);
     }
   };
@@ -347,7 +343,7 @@ export function TableDesignDialog({
       });
       setForeignKeys(data as ForeignKeyDetail[]);
     } catch (error) {
-      console.error('加载外键失败:', error);
+      // Error handling without console logging
     } finally {
       setForeignKeysLoading(false);
     }

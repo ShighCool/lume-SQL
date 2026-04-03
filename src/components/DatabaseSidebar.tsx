@@ -87,7 +87,7 @@ export function DatabaseSidebar({ connectionId }: DatabaseSidebarProps) {
         setSelectedTable(null);
       }
     } catch (error) {
-      console.error('加载数据库列表失败:', error);
+      // Error handling without console logging
     } finally {
       setLoading(false);
     }
@@ -106,7 +106,6 @@ export function DatabaseSidebar({ connectionId }: DatabaseSidebarProps) {
         const viewResult: string[] = await invoke('get_views', { connId: connectionId, database });
         setViews(viewResult);
       } catch (error) {
-        console.error('加载视图列表失败:', error);
         setViews([]);
       }
       
@@ -115,11 +114,10 @@ export function DatabaseSidebar({ connectionId }: DatabaseSidebarProps) {
         const routineResult: any[] = await invoke('get_routines', { connId: connectionId, database });
         setRoutines(routineResult);
       } catch (error) {
-        console.error('加载存储过程/函数列表失败:', error);
         setRoutines([]);
       }
     } catch (error) {
-      console.error('加载表列表失败:', error);
+      // Error handling without console logging
     } finally {
       setLoading(false);
     }
@@ -154,7 +152,7 @@ export function DatabaseSidebar({ connectionId }: DatabaseSidebarProps) {
       try {
         await navigator.clipboard.writeText(contextMenuTable);
       } catch (err) {
-        console.error('复制失败:', err);
+        // Error handling without console logging
       }
     }
   };
@@ -171,7 +169,6 @@ export function DatabaseSidebar({ connectionId }: DatabaseSidebarProps) {
       setDdlContent(ddl);
       setShowDdlDialog(true);
     } catch (error) {
-      console.error('获取表 DDL 失败:', error);
       alert(`获取表 DDL 失败: ${error}`);
     }
   };
@@ -195,7 +192,6 @@ export function DatabaseSidebar({ connectionId }: DatabaseSidebarProps) {
       });
       downloadSqlFile(contextMenuTable, sql, 'structure');
     } catch (error) {
-      console.error('导出表结构失败:', error);
       alert(`导出表结构失败: ${error}`);
     }
   };
@@ -211,7 +207,6 @@ export function DatabaseSidebar({ connectionId }: DatabaseSidebarProps) {
       });
       downloadSqlFile(contextMenuTable, sql, 'data');
     } catch (error) {
-      console.error('导出表数据失败:', error);
       alert(`导出表数据失败: ${error}`);
     }
   };
@@ -244,7 +239,6 @@ export function DatabaseSidebar({ connectionId }: DatabaseSidebarProps) {
       setRandomDataCount(10);
       loadTables(activeDatabase);
     } catch (error) {
-      console.error('生成随机数据失败:', error);
       alert(`生成随机数据失败: ${error}`);
     }
   };
@@ -266,7 +260,6 @@ export function DatabaseSidebar({ connectionId }: DatabaseSidebarProps) {
       }
       loadTables(activeDatabase);
     } catch (error) {
-      console.error('删除表失败:', error);
       alert(`删除表失败: ${error}`);
     }
   };
@@ -286,7 +279,6 @@ export function DatabaseSidebar({ connectionId }: DatabaseSidebarProps) {
       setNewTableName('');
       loadTables(activeDatabase);
     } catch (error) {
-      console.error('复制表失败:', error);
       alert(`复制表失败: ${error}`);
     }
   };

@@ -63,7 +63,7 @@ export default function DataSyncPanel({ connectionId, database, table }: DataSyn
       });
       setReplicationStatus(result);
     } catch (error) {
-      console.error('获取复制状态失败:', error);
+      // Error handling without console logging
     } finally {
       setLoading(false);
     }
@@ -84,7 +84,6 @@ export default function DataSyncPanel({ connectionId, database, table }: DataSyn
       });
       setConsistencyResult(result);
     } catch (error) {
-      console.error('检查数据一致性失败:', error);
       alert('检查失败: ' + error);
     } finally {
       setLoading(false);

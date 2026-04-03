@@ -216,7 +216,6 @@ export function MySQLBrowser({ connectionId, database, table }: MySQLBrowserProp
       setColumnVisibility(visibility);
       setSqlQuery(`SELECT * FROM ${database}.${table} LIMIT ${pageSize}`);
     } catch (error) {
-      console.error('加载表数据失败:', error);
       alert(`加载表数据失败: ${error}`);
     } finally {
       setLoading(false);
@@ -234,7 +233,6 @@ export function MySQLBrowser({ connectionId, database, table }: MySQLBrowserProp
       });
       setTableSchema(result);
     } catch (error) {
-      console.error('加载表结构失败:', error);
       alert(`加载表结构失败: ${error}`);
     } finally {
       setSchemaLoading(false);
@@ -301,7 +299,6 @@ export function MySQLBrowser({ connectionId, database, table }: MySQLBrowserProp
         database: database || undefined,
       });
       
-      console.error('执行查询失败:', error);
       alert(`执行查询失败: ${error}`);
     } finally {
       setLoading(false);
@@ -316,7 +313,6 @@ export function MySQLBrowser({ connectionId, database, table }: MySQLBrowserProp
       setExplainResult(result);
       setShowExplainDialog(true);
     } catch (error) {
-      console.error('执行 EXPLAIN 失败:', error);
       alert(`执行 EXPLAIN 失败: ${error}`);
     } finally {
       setExplainLoading(false);
@@ -329,7 +325,6 @@ export function MySQLBrowser({ connectionId, database, table }: MySQLBrowserProp
       setSlowQueryConfig(result);
       setShowSlowQueryDialog(true);
     } catch (error) {
-      console.error('加载慢查询配置失败:', error);
       alert(`加载慢查询配置失败: ${error}`);
     }
   };
@@ -342,7 +337,6 @@ export function MySQLBrowser({ connectionId, database, table }: MySQLBrowserProp
       setBackupSql(result);
       setShowBackupDialog(true);
     } catch (error) {
-      console.error('备份数据库失败:', error);
       alert(`备份数据库失败: ${error}`);
     } finally {
       setBackupLoading(false);
@@ -368,7 +362,6 @@ export function MySQLBrowser({ connectionId, database, table }: MySQLBrowserProp
       setInTransaction(true);
       alert('事务已开始');
     } catch (error) {
-      console.error('开始事务失败:', error);
       alert(`开始事务失败: ${error}`);
     }
   };
@@ -383,7 +376,6 @@ export function MySQLBrowser({ connectionId, database, table }: MySQLBrowserProp
         loadTableData();
       }
     } catch (error) {
-      console.error('提交事务失败:', error);
       alert(`提交事务失败: ${error}`);
     }
   };
@@ -398,7 +390,6 @@ export function MySQLBrowser({ connectionId, database, table }: MySQLBrowserProp
         loadTableData();
       }
     } catch (error) {
-      console.error('回滚事务失败:', error);
       alert(`回滚事务失败: ${error}`);
     }
   };
@@ -450,7 +441,6 @@ export function MySQLBrowser({ connectionId, database, table }: MySQLBrowserProp
       setTableDDL(ddl);
       setShowCopyTableDialog(true);
     } catch (error) {
-      console.error('获取表DDL失败:', error);
       alert(`获取表DDL失败: ${error}`);
     }
   };
@@ -542,7 +532,6 @@ export function MySQLBrowser({ connectionId, database, table }: MySQLBrowserProp
         loadTableData();
       }
     } catch (error) {
-      console.error('执行失败:', error);
       alert(`执行失败: ${error}`);
     } finally {
       setLoading(false);
