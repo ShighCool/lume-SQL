@@ -13,6 +13,9 @@ dist-ssr
 *.local
 
 .claude
+.docs
+.prompts
+.vscode/
 
 # Editor directories and files
 .vscode/*
